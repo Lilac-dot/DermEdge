@@ -56,7 +56,7 @@ On macOS without Homebrew's `libomp`, LightGBM borrows PyTorch's copy (see `app/
 **Wearable simulation:** the *Calm day / Stressful day / Itchy night / Flare* buttons replay real recordings, which can't be redistributed here. To enable them, place the WESAD windows at `dataset/WESAD/wesad_raw_windows.npz` and the Southampton e-textile patient CSVs in `dataset/southampton_moisture/PatientTest/` (sources below). Without them, the buttons are disabled and the hub still accepts live data from the wristband.
 
 ## Firmware
-`firmware_skincheck/` has two ESP-IDF projects (ESP32-CAM screen and GSR wristband) and a shared WiFi/hub component. Build and flash with the VS Code ESP-IDF extension; see `firmware_skincheck/README.md`. The firmware has not been run on hardware yet.
+`firmware_dermedge/` has two ESP-IDF projects (ESP32-CAM screen and GSR wristband) and a shared WiFi/hub component. Build and flash with the VS Code ESP-IDF extension; see `firmware_dermedge/README.md`. The firmware has not been run on hardware yet.
 
 ## Webcam-only demo
 ```bash

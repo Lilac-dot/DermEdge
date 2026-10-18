@@ -1,0 +1,20 @@
+# Laptop hub (app/server.py) and the webcam demo -- Python 3.9+
+torch==2.8.0
+torchvision==0.23.0
+transformers==4.56.2
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+python-multipart==0.0.20
+pydantic==2.13.5
+numpy==2.0.2
+scipy==1.13.1
+pillow==11.3.0
+lightgbm==4.6.0
+scikit-learn==1.6.1
+pandas==2.3.3
+matplotlib==3.9.4
+opencv-python>=4.10
+
+# Retraining the ESP32 model (scripts/train_esp32_rash_gate.py) needs TensorFlow, which wants
+# numpy<2, so keep it in its own virtualenv:
+#   python3 -m venv .venv-tf && .venv-tf/bin/pip install tensorflow==2.16.2 "numpy<2" pandas pillow scikit-learn

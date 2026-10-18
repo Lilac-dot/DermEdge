@@ -1,0 +1,5 @@
+## Fetched automatically by the ESP-IDF component manager on the first build.
+dependencies:
+  idf: ">=5.2"
+  espressif/esp32-camera: "^2.0.10"
+  espressif/esp-tflite-micro: "^1.3.1"

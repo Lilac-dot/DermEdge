@@ -1,0 +1,49 @@
+menu "SkinCheck camera"
+
+    choice SKINCHECK_SCREEN_MODE
+        prompt "Where the normal-vs-rash screen runs"
+        default SKINCHECK_SCREEN_ON_DEVICE
+        help
+            On device: the 300 KB INT8 model runs here (97% on its own test set, but its
+            "normal" training photos were stock images, so it is weak on real skin).
+            On hub: every frame goes to the laptop's CLIP rash screen (AUC 0.93 on real phone
+            photos) -- more accurate, needs the hub reachable all the time.
+
+        config SKINCHECK_SCREEN_ON_DEVICE
+            bool "On device (TFLite Micro)"
+        config SKINCHECK_SCREEN_ON_HUB
+            bool "On the laptop hub (/api/screen)"
+    endchoice
+
+    config SKINCHECK_CAPTURE_PERIOD_MS
+        int "Time between captures (ms)"
+        default 3000
+
+    config SKINCHECK_POSITIVE_STREAK
+        int "Positive frames in a row before sending for full analysis"
+        default 2
+        help
+            Stops one odd frame from triggering the full pipeline.
+
+    config SKINCHECK_COOLDOWN_S
+        int "Seconds to wait after a full analysis before the next"
+        default 20
+
+    config SKINCHECK_THRESHOLD_PERCENT
+        int "Positive threshold (percent)"
+        default 50
+
+    config SKINCHECK_SWAP_RB
+        bool "Swap red and blue before the model"
+        default y
+        help
+            esp32-camera's fmt2rgb888() writes pixels as B,G,R. The model was trained on R,G,B,
+            so the default swaps them back. Untick only if you change the decoder.
+
+    config SKINCHECK_FLASH_DURING_CAPTURE
+        bool "Light the white flash LED while capturing"
+        default n
+        help
+            Even lighting helps the model, but the AI-Thinker flash LED is very bright.
+
+endmenu

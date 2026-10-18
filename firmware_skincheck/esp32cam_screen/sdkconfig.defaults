@@ -1,0 +1,11 @@
+# AI-Thinker ESP32-CAM: classic ESP32, 4 MB flash, 4 MB PSRAM
+CONFIG_IDF_TARGET="esp32"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+# camera frame buffers, the decoded RGB frame and the model arena all live in PSRAM
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_CAPS_ALLOC=y
+# app + TFLite Micro + 300 KB model + camera + WiFi needs more than the default 1 MB app slot
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y

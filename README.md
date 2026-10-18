@@ -41,6 +41,11 @@ At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick Iâ€
 - First-run setup: privacy consent, skin type and the body sites you want to track
 - History chart, sample history for demos (clearly labelled), printable doctor report
 
+## Try it in your browser
+`web/` is a static version of the dashboard where every model runs on the visitor's own device: CLIP through transformers.js (WebGPU + fp16 where available, otherwise WebAssembly), the eczema-vs-look-alikes ResNet18 through ONNX Runtime Web, and the stress model in plain JavaScript. History is kept in the browser, nothing is uploaded, and the wearable tab uses a simulated wristband. The first visit downloads the skin model once (~175 MB with WebGPU). It's deployed on Vercel from this repo (`vercel.json`); to try it locally, serve `web/` with any static server.
+
+Checked against the Python models: the browser CLIP gives the same stage-1 decision on 98.5% of 200 held-out phone photos, and the ONNX ResNet18 and JavaScript stress model match their Python versions exactly. `scripts/export_web_models.py` rebuilds `web/models/`.
+
 ## Run the hub
 
 ```bash

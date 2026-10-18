@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkinCheck</title>
+<script src="/static/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2433; --muted: #667085; --line: #e4e7ec;
+    --accent: #3b5bdb; --ok: #2f9e44; --warn: #e8590c; --bad: #e03131; --neutral: #868e96;
+    --ok-bg: #ebfbee; --warn-bg: #fff4e6; --bad-bg: #fff5f5; --neutral-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151c; --card: #1b1f29; --text: #e6e8ee; --muted: #98a2b3; --line: #2a303d;
+      --accent: #748ffc; --ok: #51cf66; --warn: #ff922b; --bad: #ff6b6b; --neutral: #adb5bd;
+      --ok-bg: #16281c; --warn-bg: #2d1f12; --bad-bg: #2d1616; --neutral-bg: #232833;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151c; --card: #1b1f29; --text: #e6e8ee; --muted: #98a2b3; --line: #2a303d;
+    --accent: #748ffc; --ok: #51cf66; --warn: #ff922b; --bad: #ff6b6b; --neutral: #adb5bd;
+    --ok-bg: #16281c; --warn-bg: #2d1f12; --bad-bg: #2d1616; --neutral-bg: #232833;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg);
+         color: var(--text); }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; background: var(--card);
+           border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .tag { font-size: 12px; color: var(--muted); }
+  nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  nav button { border: 0; background: transparent; color: var(--muted); padding: 8px 14px;
+               border-radius: 8px; font-size: 14px; cursor: pointer; }
+  nav button.on { background: var(--neutral-bg); color: var(--text); font-weight: 600; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+  .tab { display: none; } .tab.on { display: block; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .cam { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; }
+  .cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .cam .box { position: absolute; border: 3px solid #fff; border-radius: 10px; left: 50%; top: 50%;
+              transform: translate(-50%, -50%); width: 45%; aspect-ratio: 1; box-shadow: 0 0 0 9999px rgba(0,0,0,.25); }
+  .badge { position: absolute; top: 12px; left: 12px; padding: 8px 14px; border-radius: 999px;
+           font-weight: 700; font-size: 18px; background: rgba(20,20,20,.75); color: #fff; }
+  .badge.rash { background: var(--bad); } .badge.normal { background: var(--ok); }
+  .controls { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 9px 14px;
+         border-radius: 10px; font-size: 14px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  label.toggle { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+  .chain { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+  .step { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px;
+          background: var(--neutral-bg); font-size: 14px; }
+  .step .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+             background: var(--card); font-size: 12px; font-weight: 700; flex: none; }
+  .step .v { margin-left: auto; font-weight: 600; }
+  .step.skip { opacity: .45; }
+  .headline { font-size: 22px; font-weight: 700; margin: 4px 0; }
+  .verdict { padding: 14px; border-radius: 12px; }
+  .verdict.eczema { background: var(--warn-bg); } .verdict.other_rash { background: var(--bad-bg); }
+  .verdict.normal { background: var(--ok-bg); } .verdict.no_skin { background: var(--neutral-bg); }
+  .pics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pics img { width: 100%; border-radius: 10px; aspect-ratio: 1; object-fit: cover; }
+  .pics figure { margin: 0; } .pics figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .meter { height: 10px; border-radius: 999px; background: var(--neutral-bg); overflow: hidden; }
+  .meter > div { height: 100%; border-radius: 999px; }
+  .row { display: flex; justify-content: space-between; font-size: 13px; margin: 10px 0 4px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--neutral-bg); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+  .hist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+  .hist .card { padding: 10px; } .hist img { width: 100%; border-radius: 8px; aspect-ratio: 1; object-fit: cover; }
+  .form { display: grid; gap: 12px; }
+  .form label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  .form input[type=number], .form textarea { padding: 8px; border-radius: 8px; border: 1px solid var(--line);
+       background: var(--bg); color: var(--text); font-size: 14px; }
+  input[type=range] { width: 100%; }
+  .disclaimer { font-size: 12px; color: var(--muted); margin-top: 14px; }
+  .stat { font-size: 28px; font-weight: 700; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 14px; }
+  .tile { background: var(--neutral-bg); border-radius: 12px; padding: 12px; }
+  .tile .k { font-size: 12px; color: var(--muted); } .tile .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .tile .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .fst { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sw { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; cursor: pointer;
+        color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; text-shadow: 0 0 3px #000; }
+  .sw.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--card) inset; }
+  .sw.none { background: var(--neutral-bg); color: var(--muted); text-shadow: none; width: auto; padding: 0 10px; border-radius: 999px; }
+  table.ft { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.ft th, table.ft td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
+  table.ft td.bad { color: var(--bad); font-weight: 700; } table.ft td.good { color: var(--ok); font-weight: 700; }
+  .badge.warn { background: var(--warn); }
+  .verdict.retake { background: var(--warn-bg); }
+  .site-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .site-row select { padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 14px; }
+  .compare { display: grid; grid-template-columns: 80px 1fr; gap: 12px; align-items: center; margin-top: 14px;
+             padding: 12px; border-radius: 12px; background: var(--neutral-bg); }
+  .compare img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; }
+  .trend-better { color: var(--ok); font-weight: 700; } .trend-worse { color: var(--bad); font-weight: 700; }
+  .trend-same { color: var(--muted); font-weight: 700; }
+  .alert { margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: 14px; }
+  .alert.high { background: var(--bad-bg); } .alert.moderate { background: var(--warn-bg); } .alert.low { background: var(--ok-bg); }
+  .alert b { display: block; margin-bottom: 4px; } .alert ul { margin: 6px 0 0; padding-left: 18px; }
+  .chip.sample { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+  .sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+  .sitecard { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: center; padding: 10px;
+              border-radius: 12px; background: var(--neutral-bg); }
+  .sitecard img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
+  .btn.sim.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>SkinCheck</h1><div class="tag">Offline skin screening hub · runs on this device only</div></div>
+  <nav>
+    <button data-tab="check" class="on">Check</button>
+    <button data-tab="history">History</button>
+    <button data-tab="triggers">Wearable</button>
+    <button data-tab="report">Doctor report</button>
+  </nav>
+</header>
+
+<main>
+  <!-- CHECK -->
+  <section class="tab on" id="tab-check">
+    <div class="grid">
+      <div class="card">
+        <h2>Live camera · stage 1: normal vs rash</h2>
+        <div class="cam">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="box"></div>
+          <div class="badge" id="badge">Starting camera…</div>
+        </div>
+        <div class="controls">
+          <button class="btn primary" id="analyzeBtn">Analyse now</button>
+          <label class="btn" for="upload">Upload photo</label>
+          <input type="file" id="upload" accept="image/*" hidden>
+          <label class="toggle"><input type="checkbox" id="auto" checked> Auto-analyse when a rash is held in view</label>
+        </div>
+        <div class="muted" id="camNote" style="margin-top:8px">Hold the skin inside the white box, 10–15 cm away.</div>
+        <div class="site-row">
+          <label class="muted" for="site">Body site</label>
+          <select id="site"><option value="">Not set</option></select>
+          <span class="muted" style="font-size:12px">Pick where the photo is from to track it over time.</span>
+        </div>
+        <div class="fst">
+          <span class="muted">Your skin type (Fitzpatrick):</span>
+          <div class="swatches" id="swatches"></div>
+        </div>
+        <div class="muted" style="font-size:12px">Used only to calibrate the rash screen for your skin tone. Stored on this device.</div>
+      </div>
+
+      <div class="card" id="resultCard">
+        <h2>Result</h2>
+        <div class="empty" id="resultEmpty">Show a rash to the camera, press <b>Analyse now</b>, or upload a photo.</div>
+        <div id="result" hidden>
+          <div class="verdict" id="verdict">
+            <div class="headline" id="headline"></div>
+            <div id="advice" style="font-size:14px"></div>
+          </div>
+          <div class="chain">
+            <div class="step" id="s1"><span class="n">1</span>Normal vs rash<span class="v"></span></div>
+            <div class="step" id="s2"><span class="n">2</span>Eczema vs 7 look-alikes<span class="v"></span></div>
+            <div class="step" id="s3"><span class="n">3</span>Severity (EASI-signs 0–12)<span class="v"></span></div>
+          </div>
+          <div class="pics" id="pics"></div>
+          <div id="flareBox"></div>
+          <div id="compareBox"></div>
+          <div id="alertBox"></div>
+        </div>
+        <div class="disclaimer">Prototype screening aid, not a diagnosis. Photos are processed and stored on this device only.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="tab" id="tab-history">
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+        <h2 style="margin:0">Progress by body site</h2>
+        <div class="controls" style="margin:0">
+          <button class="btn" id="seedBtn">Load sample history</button>
+          <button class="btn" id="clearBtn">Clear sample history</button>
+        </div>
+      </div>
+      <div class="sites" id="sites"></div>
+      <div class="muted" id="seedNote" style="margin-top:8px">Sample history is four weeks of example check-ins (real eczema photos run through the real models, with made-up dates, sites and triggers). It is labelled "sample" everywhere.</div>
+    </div>
+    <div class="card">
+      <h2>Severity and flare risk over time</h2>
+      <div style="position:relative;height:280px"><canvas id="chart"></canvas></div>
+    </div>
+    <div class="hist" id="hist"></div>
+  </section>
+
+  <!-- WEARABLE -->
+  <section class="tab" id="tab-triggers">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+        <h2 style="margin:0">GSR wristband + skin moisture patch</h2>
+        <span class="muted" id="simSource">Hardware not connected. Pick a simulated day to replay recorded data.</span>
+      </div>
+      <div class="controls">
+        <button class="btn sim" data-s="calm">Calm day</button>
+        <button class="btn sim" data-s="stress">Stressful day</button>
+        <button class="btn sim" data-s="itchy_night">Itchy night</button>
+        <button class="btn sim" data-s="flare">Flare conditions</button>
+        <button class="btn sim" data-s="off">Stop</button>
+      </div>
+      <div class="muted" id="simLabel" style="margin-top:8px"></div>
+      <div class="tiles" id="tiles"></div>
+      <div style="position:relative;height:200px;margin-top:12px"><canvas id="stressChart"></canvas></div>
+    </div>
+    <div class="grid" style="margin-top:20px">
+      <div class="card">
+        <h2>Current triggers</h2>
+        <div class="row"><span>Trigger index (noisy-OR of all triggers)</span><b id="tIndex">0.00</b></div>
+        <div class="meter"><div id="tIndexBar" style="width:0;background:var(--warn)"></div></div>
+        <div id="alertBox2"></div>
+        <div id="tList"></div>
+        <div class="disclaimer">Flare risk = image score × trigger index, so it stays near zero without active eczema.
+          Trigger thresholds are demo defaults, not fitted to flare data.</div>
+      </div>
+      <div class="card">
+        <h2>Today's journal</h2>
+        <div class="form">
+          <label>Stress (0–10) <input type="range" id="stress" min="0" max="10" value="3"></label>
+          <label>Hours of sleep <input type="number" id="sleep" min="0" max="14" step="0.5" value="7"></label>
+          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="newprod"> Used a new soap, detergent or cream</label>
+          <label>Notes <textarea id="notes" rows="2" placeholder="e.g. ate peanuts, wore wool"></textarea></label>
+          <button class="btn primary" id="journalBtn">Save journal</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORT -->
+  <section class="tab" id="tab-report">
+    <div class="card">
+      <h2>Doctor report</h2>
+      <p class="muted">A printable summary of every check: photos, heatmaps, severity and flare risk. Use your browser's
+        <b>Print → Save as PDF</b>.</p>
+      <div style="display:flex;gap:24px;margin:16px 0;flex-wrap:wrap">
+        <div><div class="stat" id="nChecks">0</div><div class="muted">checks</div></div>
+        <div><div class="stat" id="nEczema">0</div><div class="muted">eczema results</div></div>
+        <div><div class="stat" id="lastSev">–</div><div class="muted">latest severity</div></div>
+      </div>
+      <a class="btn primary" href="/report" target="_blank" style="text-decoration:none;display:inline-block">Open report</a>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h2>Does it work across skin tones?</h2>
+      <p class="muted">Stage 1 (normal vs rash) on held-out real smartphone photos, by Fitzpatrick skin type.
+        At one shared threshold the model missed more rashes on darker skin, even though it ranked them
+        almost as well (similar AUC). Choosing your skin type applies a calibrated threshold.</p>
+      <div style="overflow-x:auto"><table class="ft" id="fairTable"></table></div>
+      <p class="disclaimer">Skin type V–VI has only 16 healthy and 114 rash photos, and its threshold was tuned on them,
+        so its calibrated numbers are a demonstrated fix, not a validated one.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let rashStreak = 0, lastAnalyse = 0, busy = false, chart;
+
+// tabs
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === "tab-" + b.dataset.tab));
+  if (b.dataset.tab === "history" || b.dataset.tab === "report") loadHistory();
+  if (b.dataset.tab === "report") loadFairness();
+  if (b.dataset.tab === "triggers") loadState();
+});
+
+// camera
+const video = $("video");
+async function startCamera() {
+  try {
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    $("badge").textContent = "Looking…";
+    loop();
+  } catch (e) {
+    $("badge").textContent = "No camera";
+    $("camNote").textContent = "Camera blocked or missing: allow it in the browser, or use Upload photo.";
+  }
+}
+
+function crop(size) {
+  // the square under the on-screen box, un-mirrored. The box is 45% of the 4:3 frame's width,
+  // and object-fit: cover crops a wide webcam image to that 4:3 frame first.
+  const w = video.videoWidth, h = video.videoHeight;
+  const side = Math.min(Math.min(w, h * 4 / 3) * 0.45, h);
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  c.getContext("2d").drawImage(video, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+  return new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
+}
+
+async function post(url, blob) {
+  const fd = new FormData(); fd.append("image", blob, "frame.jpg");
+  const r = await fetch(url, { method: "POST", body: fd });
+  return r.json();
+}
+
+async function loop() {
+  while (true) {
+    if (video.videoWidth && !busy) {
+      try {
+        const s = await post("/api/screen", await crop(320));
+        const b = $("badge");
+        const q = s.quality || { ok: true, issues: [] };
+        if (!q.ok) { b.className = "badge warn"; b.textContent = q.issues.includes("blurry") ? "Hold still" : q.issues.includes("too_dark") ? "More light" : "Too bright"; rashStreak = 0; }
+        else if (!s.skin) { b.className = "badge"; b.textContent = "Point at skin"; rashStreak = 0; }
+        else if (s.p_rash >= 0.5) { b.className = "badge rash"; b.textContent = `RASH ${Math.round(s.p_rash * 100)}%`; rashStreak++; }
+        else { b.className = "badge normal"; b.textContent = `NORMAL ${Math.round((1 - s.p_rash) * 100)}%`; rashStreak = 0; }
+        if ($("auto").checked && rashStreak >= 4 && Date.now() - lastAnalyse > 8000) analyseCamera();
+      } catch (e) { /* server restarting; try again */ }
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+}
+
+async function analyseCamera() {
+  if (!video.videoWidth) return;
+  analyse(await crop(448), "webcam");
+}
+
+async function analyse(blob, source) {
+  busy = true; lastAnalyse = Date.now(); rashStreak = 0;
+  const site = $("site").value;
+  try { show(await post("/api/analyze?source=" + source + (site ? "&site=" + site : ""), blob)); } finally { busy = false; }
+}
+
+$("analyzeBtn").onclick = analyseCamera;
+$("upload").onchange = e => { if (e.target.files[0]) analyse(e.target.files[0], "upload"); e.target.value = ""; };
+
+function pct(x) { return Math.round(x * 100) + "%"; }
+
+function show(r) {
+  $("resultEmpty").hidden = true; $("result").hidden = false;
+  $("verdict").className = "verdict " + r.verdict;
+  $("headline").textContent = r.headline;
+  $("advice").textContent = r.advice;
+  const retake = r.verdict === "retake";
+  document.querySelector("#result .chain").hidden = retake;
+  if (retake) { ["pics", "flareBox", "compareBox", "alertBox"].forEach(id => $(id).innerHTML = ""); return; }
+  const step = (id, text, skip) => { $(id).classList.toggle("skip", !!skip); $(id).querySelector(".v").textContent = text; };
+  step("s1", r.skin ? (r.p_rash >= 0.5 ? `Rash · ${pct(r.p_rash)}` : `Normal · ${pct(1 - r.p_rash)}`) : "No skin");
+  step("s2", r.p_eczema == null ? "skipped" : (r.p_eczema >= 0.5 ? `Eczema · ${pct(r.p_eczema)}` : `Look-alike · ${pct(1 - r.p_eczema)}`), r.p_eczema == null);
+  step("s3", r.severity ? `${r.severity.band} · ${r.severity.score}/12` : "skipped", !r.severity);
+  $("s1").querySelector(".v").textContent += r.calibrated_for ? ` (calibrated for ${r.calibrated_for})` : "";
+  $("pics").innerHTML = `<figure><img src="${r.image}"><figcaption>Captured photo</figcaption></figure>` +
+    (r.heatmap ? `<figure><img src="${r.heatmap}"><figcaption>Where stage 2 looked (Grad-CAM)</figcaption></figure>` : "");
+  if (r.flare) {
+    const risk = r.flare.risk, col = risk > 0.5 ? css("--bad") : risk > 0.2 ? css("--warn") : css("--ok");
+    $("flareBox").innerHTML = `<div class="row"><span>Flare risk (image × triggers)</span><b>${risk.toFixed(2)}</b></div>
+      <div class="meter"><div style="width:${Math.min(100, risk * 100)}%;background:${col}"></div></div>
+      <div class="chips">${Object.entries(r.triggers || {}).map(([k, v]) => `<span class="chip">${k} ${v.toFixed(2)}</span>`).join("") ||
+        '<span class="chip">no triggers logged</span>'}</div>`;
+  } else $("flareBox").innerHTML = "";
+  const c = r.compare;
+  $("compareBox").innerHTML = c ? `<div class="compare"><img src="${c.prev_image}" alt="Previous photo">
+    <div><div class="muted">${siteName(r.site)} · last check ${new Date(c.prev_ts * 1000).toLocaleDateString()}</div>
+    <div style="font-size:18px;margin-top:2px">${c.prev_score} → ${r.severity.score} <span class="trend-${c.trend}">${c.trend === "better" ? "▼ better" : c.trend === "worse" ? "▲ worse" : "no change"}</span></div></div></div>` :
+    (r.site && r.severity ? `<div class="muted" style="margin-top:10px">First check at ${siteName(r.site)}. The next one will be compared with this.</div>` : "");
+  $("alertBox").innerHTML = alertHtml(r.alerts);
+}
+
+const SITE_NAMES = {};
+function siteName(s) { return SITE_NAMES[s] || (s || "").replace(/_/g, " "); }
+function alertHtml(a) {
+  if (!a || (a.level === "low" && !a.tips.length)) return "";
+  const title = a.level === "high" ? "High flare risk today" : a.level === "moderate" ? "Moderate flare risk today" : "Low flare risk";
+  return `<div class="alert ${a.level}"><b>${title}${a.triggers.length ? ": " + a.triggers.join(", ") : ""}</b>
+    ${a.tips.length ? "<ul>" + a.tips.map(t => `<li>${t}</li>`).join("") + "</ul>" : ""}</div>`;
+}
+async function loadSites() {
+  const s = await (await fetch("/api/sites")).json();
+  const sel = $("site"), cur = sel.value;
+  if (sel.options.length <= 1) s.all_sites.forEach(k => {
+    SITE_NAMES[k] = k.replace(/_/g, " ").replace(/^./, m => m.toUpperCase());
+    const o = document.createElement("option"); o.value = k; o.textContent = SITE_NAMES[k]; sel.appendChild(o);
+  });
+  sel.value = cur;
+  $("sites").innerHTML = s.sites.length ? s.sites.map(x => {
+    const d = Math.round((x.latest - x.first) * 10) / 10, trend = d <= -0.5 ? "better" : d >= 0.5 ? "worse" : "same";
+    return `<div class="sitecard"><img src="${x.latest_image}" alt="">
+      <div><b>${siteName(x.site)}</b><div class="muted">${x.checks} check${x.checks > 1 ? "s" : ""} since ${new Date(x.first_ts * 1000).toLocaleDateString()}</div>
+      <div>${x.first} → ${x.latest} <span class="trend-${trend}">${trend === "better" ? "▼ better" : trend === "worse" ? "▲ worse" : "no change"}</span></div></div></div>`;
+  }).join("") : '<div class="muted">No eczema checks with a body site yet. Pick a body site before analysing, or load the sample history.</div>';
+}
+$("seedBtn").onclick = async () => {
+  $("seedBtn").disabled = true; $("seedBtn").textContent = "Loading…";
+  try {
+    const r = await (await fetch("/api/demo/seed", { method: "POST" })).json();
+    if (r.error) $("seedNote").textContent = r.error;
+    await loadHistory();
+  }
+  finally { $("seedBtn").disabled = false; $("seedBtn").textContent = "Load sample history"; }
+};
+$("clearBtn").onclick = async () => { await fetch("/api/demo/clear", { method: "POST" }); loadHistory(); };
+
+// history
+async function loadHistory() {
+  const h = (await (await fetch("/api/history")).json()).filter(x => x.verdict !== "no_skin");
+  loadSites();
+  $("nChecks").textContent = h.length;
+  $("nEczema").textContent = h.filter(x => x.verdict === "eczema").length;
+  const lastE = [...h].reverse().find(x => x.severity);
+  $("lastSev").textContent = lastE ? `${lastE.severity.band} ${lastE.severity.score}` : "–";
+  $("hist").innerHTML = h.length ? [...h].reverse().map(x => `<div class="card">
+      <img src="${x.heatmap || x.image}"><div style="font-weight:600;margin-top:6px;font-size:14px">${x.headline}</div>
+      <div class="muted">${new Date(x.ts * 1000).toLocaleString()}${x.severity ? " · " + x.severity.score + "/12" : ""}${x.site ? " · " + siteName(x.site) : ""}</div>
+      ${x.sample ? '<span class="chip sample">sample</span>' : ""}</div>`).join("")
+    : '<div class="empty card">No checks yet.</div>';
+  const pts = h.filter(x => x.verdict === "eczema" || x.verdict === "normal");
+  const labels = pts.map(x => new Date(x.ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+  const data = {
+    labels,
+    datasets: [
+      { label: "Severity (0–12)", data: pts.map(x => x.severity ? x.severity.score : 0), borderColor: css("--warn"),
+        backgroundColor: css("--warn"), yAxisID: "y", tension: .3 },
+      { label: "Flare risk (0–1)", data: pts.map(x => x.flare ? x.flare.risk : 0), borderColor: css("--accent"),
+        backgroundColor: css("--accent"), yAxisID: "y1", tension: .3 },
+    ],
+  };
+  const grid = { color: css("--line") }, ticks = { color: css("--muted") };
+  if (chart) chart.destroy();
+  chart = new Chart($("chart"), { type: "line", data, options: { maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: css("--text") } } },
+    scales: { x: { grid, ticks }, y: { min: 0, max: 12, grid, ticks, title: { display: true, text: "severity", color: css("--muted") } },
+              y1: { min: 0, max: 1, position: "right", grid: { drawOnChartArea: false }, ticks } } } });
+}
+
+// skin type
+const FST = [["I", "#f3d9c4"], ["II", "#e8c09b"], ["III", "#cf9e72"], ["IV", "#a8744a"], ["V", "#7a4b2c"], ["VI", "#4a2e1d"]];
+let fitz = null;
+function renderSwatches() {
+  $("swatches").innerHTML = FST.map(([n, c], i) => `<div class="sw ${fitz === i + 1 ? "on" : ""}" style="background:${c}" data-f="${i + 1}" title="Type ${n}">${n}</div>`).join("") +
+    `<div class="sw none ${fitz ? "" : "on"}" data-f="">Not set</div>`;
+  document.querySelectorAll(".sw").forEach(el => el.onclick = async () => {
+    fitz = (await json("/api/settings", { fitzpatrick: el.dataset.f ? +el.dataset.f : null })).fitzpatrick;
+    renderSwatches();
+  });
+}
+async function loadFairness() {
+  const f = await (await fetch("/api/fairness")).json();
+  const pct = x => Math.round(x * 100) + "%";
+  $("fairTable").innerHTML = `<tr><th>Skin type</th><th>AUC</th><th>Rashes caught (shared threshold)</th><th>Rashes caught (calibrated)</th><th>Healthy skin cleared (calibrated)</th></tr>` +
+    Object.keys(f.before).map(g => {
+      const b = f.before[g], a = f.after[g], gap = b.positive_caught < 0.75;
+      return `<tr><td>${g}</td><td>${b.auc.toFixed(2)}</td><td class="${gap ? "bad" : ""}">${pct(b.positive_caught)}</td>
+        <td class="${gap ? "good" : ""}">${pct(a.positive_caught)}</td><td>${pct(a.normal_cleared)}</td></tr>`;
+    }).join("");
+}
+
+// wearable + triggers
+let stressChart;
+function level(p) { return p == null ? "–" : p < 0.3 ? "Low" : p < 0.38 ? "Moderate" : "High"; }
+function tile(k, v, sub) { return `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`; }
+function renderState(s) {
+  const m = s.wearable.markers, sim = s.sim;
+  document.querySelectorAll(".btn.sim").forEach(b => b.classList.toggle("on", b.dataset.s === (sim.scenario || "")));
+  $("simSource").textContent = sim.source || (s.wearable.updated ? "Live hardware" : sim.available === false ? sim.missing : "Hardware not connected. Pick a simulated day to replay recorded data.");
+  document.querySelectorAll(".btn.sim").forEach(b => b.disabled = sim.available === false);
+  $("simLabel").textContent = sim.label || "";
+  const calib = m.calibration && m.calibration !== "done";
+  $("tiles").innerHTML = s.wearable.updated ? [
+    tile("Stress (GSR model)", calib ? "Calibrating" : level(m.stress_p), calib ? m.calibration : `model output ${m.stress_p ?? "–"}`),
+    tile("Heart rate", m.heart_rate ? m.heart_rate + " bpm" : "–", "from PPG"),
+    tile("Skin conductance", m.skin_conductance != null ? m.skin_conductance + " µS" : "–", "GSR / EDA"),
+    tile("Skin temperature", m.skin_temp != null ? m.skin_temp + " °C" : "–", "wrist"),
+    tile("Hydration deficit", m.hydration_deficit != null ? m.hydration_deficit + "%" : "–", "eczema patch vs healthy skin"),
+    tile("Night scratches", m.night_scratches ?? 0, "IMU bursts (simulated)"),
+  ].join("") : "";
+  const pts = s.wearable.series;
+  const data = { labels: pts.map(p => new Date(p.t * 1000).toLocaleTimeString()),
+    datasets: [{ label: "Stress model output", data: pts.map(p => p.stress), borderColor: css("--warn"), backgroundColor: css("--warn"), tension: .3, pointRadius: 0 }] };
+  if (!stressChart) {
+    stressChart = new Chart($("stressChart"), { type: "line", data, options: { animation: false, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: css("--text") } } },
+      scales: { x: { ticks: { color: css("--muted"), maxTicksLimit: 6 }, grid: { color: css("--line") } },
+                y: { min: 0.1, max: 0.6, ticks: { color: css("--muted") }, grid: { color: css("--line") } } } } });
+  } else { stressChart.data = data; stressChart.update(); }
+  $("alertBox2").innerHTML = alertHtml(s.alerts);
+  $("tIndex").textContent = s.trigger_index.toFixed(2);
+  $("tIndexBar").style.width = (s.trigger_index * 100) + "%";
+  $("tList").innerHTML = Object.entries(s.triggers).map(([k, v]) => `<div class="row"><span>${k}</span><b>${v.toFixed(2)}</b></div>
+    <div class="meter"><div style="width:${v * 100}%;background:var(--warn)"></div></div>`).join("") ||
+    '<div class="muted" style="margin-top:10px">No triggers yet.</div>';
+}
+async function loadState() { renderState(await (await fetch("/api/state")).json()); }
+const json = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
+document.querySelectorAll(".btn.sim").forEach(b => b.onclick = async () => renderState(await json("/api/sim", { scenario: b.dataset.s })));
+$("journalBtn").onclick = async () => renderState(await json("/api/journal", {
+  stress: +$("stress").value, sleep_hours: +$("sleep").value, new_product: $("newprod").checked, notes: $("notes").value }));
+setInterval(() => { if ($("tab-triggers").classList.contains("on")) loadState(); }, 2000);
+
+fetch("/api/settings").then(r => r.json()).then(s => { fitz = s.fitzpatrick; renderSwatches(); });
+loadSites();
+startCamera();
+</script>
+</body>
+</html>

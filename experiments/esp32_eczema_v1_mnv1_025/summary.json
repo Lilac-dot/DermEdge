@@ -1,0 +1,33 @@
+{
+  "n": {
+    "0": {
+      "test": 125,
+      "train": 565,
+      "val": 123
+    },
+    "1": {
+      "test": 215,
+      "train": 999,
+      "val": 214
+    }
+  },
+  "test": "original v1 Eczema-vs-Normal test split",
+  "tflite_bytes": 307560,
+  "threshold": 0.5,
+  "fp32": {
+    "auc": 0.9982,
+    "threshold": 0.5,
+    "sensitivity": 0.9674,
+    "specificity": 0.984,
+    "accuracy": 0.9735,
+    "balanced_accuracy": 0.9757
+  },
+  "int8": {
+    "auc": 0.9954,
+    "threshold": 0.5,
+    "sensitivity": 0.986,
+    "specificity": 0.944,
+    "accuracy": 0.9706,
+    "balanced_accuracy": 0.965
+  }
+}

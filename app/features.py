@@ -1,5 +1,5 @@
 """
-Product features around the SkinCheck models: photo quality gate, body-site before/after,
+Product features around the DermEdge models: photo quality gate, body-site before/after,
 flare alerts with tips, treatment log, trigger insights, and sample history for demos.
 """
 import random

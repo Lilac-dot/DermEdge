@@ -1,5 +1,5 @@
 """
-Wearable side of the SkinCheck hub: eczema-flare markers from a GSR wristband + skin patch,
+Wearable side of the DermEdge hub: eczema-flare markers from a GSR wristband + skin patch,
 and a simulator that replays real recorded data while the hardware doesn't exist yet.
 
 Markers

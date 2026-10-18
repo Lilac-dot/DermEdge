@@ -1,5 +1,5 @@
 """
-The three image models of the SkinCheck prototype, chained, plus the flare-risk score.
+The three image models of the DermEdge prototype, chained, plus the flare-risk score.
 
   Stage 1  normal skin vs rash      CLIP ViT-B/16 + fine-tuned head (scripts/finetune_clip_eczema.py
                                     --target rash). Held-out SCIN phone photos: AUC 0.93. At one shared

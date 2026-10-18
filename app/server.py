@@ -1,5 +1,5 @@
 """
-SkinCheck local hub: the dashboard and API, served from this laptop only (no internet, no
+DermEdge local hub: the dashboard and API, served from this laptop only (no internet, no
 cloud -- photos never leave the machine).
 
     python3 app/server.py          then open http://localhost:8000
@@ -62,7 +62,7 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 RASH_SUMMARY = APP_DIR.parent / "experiments" / "clip_rash_head" / "summary.json"
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="SkinCheck hub")
+app = FastAPI(title="DermEdge hub")
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 app.mount("/images", StaticFiles(directory=IMG_DIR), name="images")
 pipeline = SkinPipeline()

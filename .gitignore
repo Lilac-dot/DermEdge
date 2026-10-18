@@ -19,11 +19,11 @@ experiments/*/embeddings.npz
 experiments/*/saved_model/
 
 # ESP-IDF build output
-firmware_skincheck/*/build/
-firmware_skincheck/*/managed_components/
-firmware_skincheck/*/dependencies.lock
-firmware_skincheck/*/sdkconfig
-firmware_skincheck/*/sdkconfig.old
+firmware_dermedge/*/build/
+firmware_dermedge/*/managed_components/
+firmware_dermedge/*/dependencies.lock
+firmware_dermedge/*/sdkconfig
+firmware_dermedge/*/sdkconfig.old
 
 # OS
 .DS_Store

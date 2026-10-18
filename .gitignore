@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.venv*/
+
+# Hub data: check-in history, captured photos, settings -- stays on the device
+app/data/
+app/sample_photos/*
+!app/sample_photos/.gitkeep
+
+# Research datasets (see README: Data)
+dataset/
+SkinDisease/
+Eczema/
+
+# Training caches
+experiments/*/cache/
+experiments/*/embeddings.npz
+experiments/*/saved_model/
+
+# ESP-IDF build output
+firmware_skincheck/*/build/
+firmware_skincheck/*/managed_components/
+firmware_skincheck/*/dependencies.lock
+firmware_skincheck/*/sdkconfig
+firmware_skincheck/*/sdkconfig.old
+
+# OS
+.DS_Store

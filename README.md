@@ -36,6 +36,9 @@ At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I�
 - Wearable markers: stress, heart rate, skin conductance, skin temperature, hydration deficit, night scratching
 - Daily flare risk with alerts and one tip per active trigger
 - Skin-type calibration (Fitzpatrick I–VI)
+- Treatment log (moisturiser, steroid cream, antihistamine, wet wrap…) shown on the history chart
+- Trigger insights: which of your triggers line up with worse check-ins, from your own log
+- First-run setup: privacy consent, skin type and the body sites you want to track
 - History chart, sample history for demos (clearly labelled), printable doctor report
 
 ## Run the hub

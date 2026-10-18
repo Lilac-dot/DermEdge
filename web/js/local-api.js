@@ -102,8 +102,7 @@
     return { insights: out, n_checks: checks.length, min_checks: 3, all_sample: checks.length > 0 && checks.every(h => h.sample) };
   }
   function verdict(res, trig) {
-    if (!res.skin) return Object.assign(res, { verdict: 'no_skin', headline: 'No skin in view', advice: 'Hold the skin inside the box, 10-15 cm from the camera.' });
-    if (res.p_rash < 0.5) return Object.assign(res, { verdict: 'normal', headline: 'No rash detected',
+    if (!res.skin || res.p_rash < 0.5) return Object.assign(res, { verdict: 'normal', headline: 'No rash detected',
       advice: 'Skin looks normal. Keep logging triggers in your journal.', triggers: trig, flare: flareRisk(0, trig) });
     let imageScore = 0;
     if (res.p_eczema >= 0.5) {

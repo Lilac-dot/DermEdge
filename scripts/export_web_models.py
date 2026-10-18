@@ -35,8 +35,11 @@ PROMPTS = {  # app/pipeline.py
                "a close-up photo of clear, even skin with no rash"],
     "rash": ["a photo of a skin rash", "a close-up photo of a skin disease lesion",
              "a photo of inflamed, red, irritated skin", "a photo of a skin condition"],
-    "no_skin": ["a photo of a room", "a photo of a person's face", "a photo of an object",
-                "a blurry photo with no skin visible"],
+    "no_skin": ["a photo of a room", "a photo of an object", "a photo of an animal",
+                "a photo of a landscape", "a photo with no human skin visible"],
+    # Body parts count as skin: a live webcam frame of a hand or arm also shows the room around it.
+    "body": ["a photo of a hand", "a photo of an arm", "a photo of a leg", "a photo of a foot",
+             "a photo of a person's neck", "a close-up photo of human skin"],
 }
 
 

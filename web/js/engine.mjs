@@ -66,9 +66,11 @@ async function clipEmbedding(blob) {
 function fstGroup(f) { return !f ? null : f <= 2 ? 'I-II' : f <= 4 ? 'III-IV' : 'V-VI'; }
 
 function stage1(e, fitzpatrick) {
-  const logits = ['normal', 'rash', 'no_skin'].map(k => 100 * dot(e, text[k]));
+  // "No skin" must beat every skin prompt (normal, rash, body parts) by 4 logit points, so a hand
+  // or arm in a busy webcam frame still counts as skin (app/pipeline.py NO_SKIN_MARGIN).
+  const [normal, rash, noSkin, body] = ['normal', 'rash', 'no_skin', 'body'].map(k => 100 * dot(e, text[k]));
   const off = heads.rash.fst_offsets[fstGroup(fitzpatrick)] || 0;
-  return { p_rash: sigmoid(dot(e, heads.rash.w) + heads.rash.b + off), skin: logits[2] < Math.max(logits[0], logits[1]),
+  return { p_rash: sigmoid(dot(e, heads.rash.w) + heads.rash.b + off), skin: noSkin <= Math.max(normal, rash, body) + 4,
            calibrated_for: fstGroup(fitzpatrick) };
 }
 

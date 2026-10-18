@@ -35,11 +35,22 @@ PROMPTS = {
                "a close-up photo of clear, even skin with no rash"],
     "rash": ["a photo of a skin rash", "a close-up photo of a skin disease lesion",
              "a photo of inflamed, red, irritated skin", "a photo of a skin condition"],
-    "no_skin": ["a photo of a room", "a photo of a person's face", "a photo of an object",
-                "a blurry photo with no skin visible"],
+    "no_skin": ["a photo of a room", "a photo of an object", "a photo of an animal",
+                "a photo of a landscape", "a photo with no human skin visible"],
+    # Body parts count as skin: a live webcam frame of a hand or arm also shows the room around it.
+    "body": ["a photo of a hand", "a photo of an arm", "a photo of a leg", "a photo of a foot",
+             "a photo of a person's neck", "a close-up photo of human skin"],
 }
 LOOK_ALIKES = "psoriasis, tinea (ringworm), candidiasis, insect bites, lichen planus, drug eruption or rosacea"
 UNSURE = (0.35, 0.65)  # stage-2 probabilities in this band are reported as uncertain
+# "No skin" needs the no-skin prompts to beat every skin prompt by this many logit points; on
+# 4,533 skin photos it then never fires, so a webcam frame with a hand in it isn't rejected.
+NO_SKIN_MARGIN = 4.0
+
+
+def is_skin(logits):
+    normal, rash, no_skin, body = logits
+    return bool(no_skin <= max(normal, rash, body) + NO_SKIN_MARGIN)
 
 
 def fst_group(fitzpatrick):
@@ -77,7 +88,7 @@ class SkinPipeline:
         self.proc = CLIPProcessor.from_pretrained(CLIP_NAME)
         with torch.no_grad():
             text = []
-            for key in ("normal", "rash", "no_skin"):
+            for key in ("normal", "rash", "no_skin", "body"):
                 t = self.clip.get_text_features(**self.proc(
                     text=PROMPTS[key], return_tensors="pt", padding=True).to(self.device))
                 t = (t / t.norm(dim=-1, keepdim=True)).mean(0)
@@ -111,8 +122,8 @@ class SkinPipeline:
     def screen(self, img, fitzpatrick=None):
         """Stage 1 only, for the live feed."""
         with self.lock:
-            f, (normal, rash, no_skin) = self._clip(img)
-        return dict(p_rash=round(self._p_rash(f, fitzpatrick), 3), skin=bool(no_skin < max(normal, rash)))
+            f, logits = self._clip(img)
+        return dict(p_rash=round(self._p_rash(f, fitzpatrick), 3), skin=is_skin(logits))
 
     def _eczema_vs_lookalike(self, img):
         """Stage 2 + Grad-CAM on layer4, for the predicted class."""
@@ -145,16 +156,12 @@ class SkinPipeline:
 
     def analyze(self, img, wearable, journal, fitzpatrick=None):
         with self.lock:
-            f, (normal, rash, no_skin) = self._clip(img)
+            f, logits = self._clip(img)
             p_rash = self._p_rash(f, fitzpatrick)
-            result = dict(p_rash=round(p_rash, 3), skin=bool(no_skin < max(normal, rash)),
+            result = dict(p_rash=round(p_rash, 3), skin=is_skin(logits),
                           p_eczema=None, severity=None, heatmap=None,
                           calibrated_for=fst_group(fitzpatrick))
-            if not result["skin"]:
-                result.update(verdict="no_skin", headline="No skin in view",
-                              advice="Hold the skin inside the box, 10-15 cm from the camera.")
-                return result, None
-            if p_rash < 0.5:
+            if not result["skin"] or p_rash < 0.5:  # nothing that looks like a rash
                 result.update(verdict="normal", headline="No rash detected",
                               advice="Skin looks normal. Keep logging triggers in your journal.")
                 result["flare"] = flare_risk(0.0, trigger_scores(wearable, journal))

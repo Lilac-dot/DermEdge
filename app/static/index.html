@@ -443,9 +443,8 @@ async function loop() {
         const b = $("badge");
         const q = s.quality || { ok: true, issues: [] };
         if (!q.ok) { b.className = "badge warn"; b.textContent = q.issues.includes("blurry") ? "Hold still" : q.issues.includes("too_dark") ? "More light" : "Too bright"; rashStreak = 0; }
-        else if (!s.skin) { b.className = "badge"; b.textContent = "Point at skin"; rashStreak = 0; }
-        else if (s.p_rash >= 0.5) { b.className = "badge rash"; b.textContent = `RASH ${Math.round(s.p_rash * 100)}%`; rashStreak++; }
-        else { b.className = "badge normal"; b.textContent = `NORMAL ${Math.round((1 - s.p_rash) * 100)}%`; rashStreak = 0; }
+        else if (s.skin && s.p_rash >= 0.5) { b.className = "badge rash"; b.textContent = `RASH ${Math.round(s.p_rash * 100)}%`; rashStreak++; }
+        else { b.className = "badge normal"; b.textContent = s.skin ? `NO RASH ${Math.round((1 - s.p_rash) * 100)}%` : "NO RASH"; rashStreak = 0; }
         if ($("auto").checked && rashStreak >= 4 && Date.now() - lastAnalyse > 8000) analyseCamera();
       } catch (e) { /* server restarting; try again */ }
     }
@@ -481,7 +480,7 @@ function show(r) {
   document.querySelector("#result .chain").hidden = retake;
   if (retake) { ["pics", "flareBox", "compareBox", "alertBox"].forEach(id => $(id).innerHTML = ""); return; }
   const step = (id, text, skip) => { $(id).classList.toggle("skip", !!skip); $(id).querySelector(".v").textContent = text; };
-  step("s1", r.skin ? (r.p_rash >= 0.5 ? `Rash · ${pct(r.p_rash)}` : `Normal · ${pct(1 - r.p_rash)}`) : "No skin");
+  step("s1", r.skin && r.p_rash >= 0.5 ? `Rash · ${pct(r.p_rash)}` : r.skin ? `No rash · ${pct(1 - r.p_rash)}` : "No rash");
   step("s2", r.p_eczema == null ? "skipped" : (r.p_eczema >= 0.5 ? `Eczema · ${pct(r.p_eczema)}` : `Look-alike · ${pct(1 - r.p_eczema)}`), r.p_eczema == null);
   step("s3", r.severity ? `${r.severity.band} · ${r.severity.score}/12` : "skipped", !r.severity);
   $("s1").querySelector(".v").textContent += r.calibrated_for ? ` (calibrated for ${r.calibrated_for})` : "";

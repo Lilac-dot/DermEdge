@@ -1,0 +1,104 @@
+{
+  "target": "rash",
+  "test": "5-fold CV, held-out SCIN rash vs healthy phone photos, grouped by case",
+  "n_scin": {
+    "rash": 1444,
+    "healthy": 90
+  },
+  "zero_shot": {
+    "auc": 0.9137,
+    "positive_caught": 0.6392,
+    "normal_cleared": 0.9889
+  },
+  "fine_tuned": {
+    "0.01": {
+      "at_0": {
+        "auc": 0.9165,
+        "positive_caught": 0.8435,
+        "normal_cleared": 0.8444
+      },
+      "at_best": {
+        "auc": 0.9165,
+        "positive_caught": 0.8657,
+        "normal_cleared": 0.8333
+      },
+      "best_thr": -0.271
+    },
+    "0.001": {
+      "at_0": {
+        "auc": 0.9227,
+        "positive_caught": 0.8539,
+        "normal_cleared": 0.8333
+      },
+      "at_best": {
+        "auc": 0.9227,
+        "positive_caught": 0.847,
+        "normal_cleared": 0.8667
+      },
+      "best_thr": 0.132
+    },
+    "0.0001": {
+      "at_0": {
+        "auc": 0.9323,
+        "positive_caught": 0.8878,
+        "normal_cleared": 0.8222
+      },
+      "at_best": {
+        "auc": 0.9323,
+        "positive_caught": 0.8193,
+        "normal_cleared": 0.9333
+      },
+      "best_thr": 0.78
+    }
+  },
+  "chosen_lambda": 0.0001,
+  "by_fitzpatrick": {
+    "I-II": {
+      "auc": 0.9324,
+      "positive_caught": 0.8396,
+      "normal_cleared": 0.9091,
+      "n_positive": 642,
+      "n_healthy": 33
+    },
+    "III-IV": {
+      "auc": 0.9305,
+      "positive_caught": 0.8298,
+      "normal_cleared": 0.9333,
+      "n_positive": 658,
+      "n_healthy": 30
+    },
+    "V-VI": {
+      "auc": 0.9145,
+      "positive_caught": 0.6667,
+      "normal_cleared": 0.9375,
+      "n_positive": 114,
+      "n_healthy": 16
+    }
+  },
+  "fitzpatrick_offsets": {
+    "I-II": 0.0,
+    "III-IV": 0.0,
+    "V-VI": 0.984
+  },
+  "by_fitzpatrick_calibrated": {
+    "I-II": {
+      "auc": 0.9324,
+      "positive_caught": 0.8396,
+      "normal_cleared": 0.9091
+    },
+    "III-IV": {
+      "auc": 0.9305,
+      "positive_caught": 0.8298,
+      "normal_cleared": 0.9333
+    },
+    "V-VI": {
+      "auc": 0.9145,
+      "positive_caught": 0.8333,
+      "normal_cleared": 0.875
+    }
+  },
+  "final": {
+    "n_train": 6836,
+    "threshold_folded_into_bias": 0.78
+  }
+}

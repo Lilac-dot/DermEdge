@@ -4,6 +4,8 @@
 
 DermEdge checks a photo of skin in three stages, tracks each body site over time, and combines the result with wearable stress and skin-moisture markers into a daily flare-risk score with tips. It runs on a laptop hub or entirely in the browser.
 
+**Live demo: https://derm-edge.vercel.app** (runs on your device; the first visit downloads the skin model once).
+
 Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the **Telemedicon 2026 AI & Digital Health Hackathon**, IIIT Sri City.
 
 | Check | History | Wearable & care |

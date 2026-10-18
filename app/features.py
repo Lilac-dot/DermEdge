@@ -1,6 +1,6 @@
 """
 Product features around the SkinCheck models: photo quality gate, body-site before/after,
-flare alerts with tips, and sample history for demos.
+flare alerts with tips, treatment log, trigger insights, and sample history for demos.
 """
 import random
 import time
@@ -93,11 +93,54 @@ def site_summary(history):
     return list(out.values())
 
 
+# --- treatment log ---------------------------------------------------------------------
+TREATMENTS = ["moisturiser", "steroid_cream", "non_steroid_cream", "antihistamine", "wet_wrap", "other"]
+
+
+def treatment_summary(treatments, days=7):
+    """Count of each treatment logged in the last `days` days."""
+    cutoff = time.time() - days * 86400
+    counts = {}
+    for t in treatments:
+        if t["ts"] >= cutoff:
+            counts[t["kind"]] = counts.get(t["kind"], 0) + 1
+    return dict(days=days, counts=counts)
+
+
+# --- trigger insights ------------------------------------------------------------------
+INSIGHT_MIN_CHECKS = 3
+INSIGHT_MIN_DIFF = 0.5  # severity points; smaller gaps aren't worth showing
+
+
+def insights(history):
+    """For each trigger: mean severity of eczema checks taken while it was active (>= 0.5) vs not.
+    Shown only with >= 3 checks on each side and a gap of >= 0.5 points. An association in
+    one person's own log, not proof of cause."""
+    checks = [h for h in history if h.get("severity")]
+    names = sorted({k for h in checks for k in (h.get("triggers") or {})})
+    out = []
+    for name in names:
+        on = [h["severity"]["score"] for h in checks if (h.get("triggers") or {}).get(name, 0) >= 0.5]
+        off = [h["severity"]["score"] for h in checks if (h.get("triggers") or {}).get(name, 0) < 0.5]
+        if len(on) >= INSIGHT_MIN_CHECKS and len(off) >= INSIGHT_MIN_CHECKS:
+            diff = float(np.mean(on) - np.mean(off))
+            if abs(diff) >= INSIGHT_MIN_DIFF:
+                out.append(dict(trigger=name, mean_with=round(float(np.mean(on)), 1),
+                                mean_without=round(float(np.mean(off)), 1), diff=round(diff, 1),
+                                n_with=len(on), n_without=len(off)))
+    out.sort(key=lambda d: -abs(d["diff"]))
+    return dict(insights=out, n_checks=len(checks), min_checks=INSIGHT_MIN_CHECKS,
+                all_sample=bool(checks) and all(h.get("sample") for h in checks))
+
+
 # --- sample history --------------------------------------------------------------------
+SAMPLE_TREATMENTS = ["moisturiser", "steroid_cream", "moisturiser", "antihistamine", "moisturiser", "wet_wrap"]
+
+
 def sample_history(pipeline, n_days=28, seed=7):
     """Four weeks of example check-ins for demos, built from real eczema photos run through the
-    real models; dates, sites and triggers are synthetic. Every entry is marked sample=True and
-    the dashboard labels it.
+    real models; dates, sites, triggers and treatments are synthetic. Every entry is marked
+    sample=True and the dashboard labels it. Returns (check-ins, treatments).
 
     Photos come from app/sample_photos/ (any .jpg/.png you add) or, failing that, the curated
     eczema validation split if the research dataset is present. Raises FileNotFoundError if
@@ -125,7 +168,7 @@ def sample_history(pipeline, n_days=28, seed=7):
     scored.sort(key=lambda r: -r[0]["severity"]["score"])
     now = time.time()
     sites = ["inner_elbow", "hand", "back_of_knee"]
-    entries = []
+    entries, treatments = [], []
     for i, (res, heat, img) in enumerate(scored):
         day = n_days - int(i * n_days / len(scored))
         ts = now - day * 86400 + rng.randint(8, 20) * 3600
@@ -137,4 +180,6 @@ def sample_history(pipeline, n_days=28, seed=7):
         res = dict(res, triggers=trig, site=sites[i % len(sites)], sample=True,
                    flare=flare_risk(p_ecz * res["severity"]["score"] / 12, trig))
         entries.append((ts, res, heat, img))
-    return entries
+        if i % 2 == 0:
+            treatments.append((ts + 3600, SAMPLE_TREATMENTS[(i // 2) % len(SAMPLE_TREATMENTS)], res["site"]))
+    return entries, treatments

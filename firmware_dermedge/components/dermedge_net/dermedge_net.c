@@ -1,4 +1,4 @@
-#include "skincheck_net.h"
+#include "dermedge_net.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -13,10 +13,10 @@
 #include "freertos/event_groups.h"
 #include "nvs_flash.h"
 
-static const char *TAG = "skincheck_net";
+static const char *TAG = "dermedge_net";
 static EventGroupHandle_t s_wifi_events;
 #define WIFI_CONNECTED_BIT BIT0
-#define BOUNDARY "----skincheckboundary7f3a"
+#define BOUNDARY "----dermedgeboundary7f3a"
 
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -54,8 +54,8 @@ static void wifi_start(void)
                                                         wifi_event_handler, NULL, NULL));
 
     wifi_config_t wc = {0};
-    strncpy((char *)wc.sta.ssid, CONFIG_SKINCHECK_WIFI_SSID, sizeof(wc.sta.ssid) - 1);
-    strncpy((char *)wc.sta.password, CONFIG_SKINCHECK_WIFI_PASSWORD, sizeof(wc.sta.password) - 1);
+    strncpy((char *)wc.sta.ssid, CONFIG_DERMEDGE_WIFI_SSID, sizeof(wc.sta.ssid) - 1);
+    strncpy((char *)wc.sta.password, CONFIG_DERMEDGE_WIFI_PASSWORD, sizeof(wc.sta.password) - 1);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -63,7 +63,7 @@ static void wifi_start(void)
     esp_wifi_set_ps(WIFI_PS_NONE);
 }
 
-esp_err_t skincheck_wifi_connect(int timeout_ms)
+esp_err_t dermedge_wifi_connect(int timeout_ms)
 {
     // Safe to call again after a timeout: the stack starts once, later calls just wait
     // (the event handler keeps retrying the connection in the background).
@@ -72,7 +72,7 @@ esp_err_t skincheck_wifi_connect(int timeout_ms)
         wifi_start();
         started = true;
     }
-    ESP_LOGI(TAG, "joining \"%s\"", CONFIG_SKINCHECK_WIFI_SSID);
+    ESP_LOGI(TAG, "joining \"%s\"", CONFIG_DERMEDGE_WIFI_SSID);
     EventBits_t bits = xEventGroupWaitBits(s_wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE,
                                            pdMS_TO_TICKS(timeout_ms));
     return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_ERR_TIMEOUT;
@@ -111,7 +111,7 @@ static int finish(esp_http_client_handle_t c, char *resp, size_t resp_len)
 static esp_http_client_handle_t open_post(const char *path, const char *content_type, size_t len)
 {
     char url[256];
-    snprintf(url, sizeof(url), "%s%s", CONFIG_SKINCHECK_HUB_URL, path);
+    snprintf(url, sizeof(url), "%s%s", CONFIG_DERMEDGE_HUB_URL, path);
     esp_http_client_config_t cfg = {
         .url = url,
         .method = HTTP_METHOD_POST,
@@ -130,7 +130,7 @@ static esp_http_client_handle_t open_post(const char *path, const char *content_
     return c;
 }
 
-int skincheck_hub_post_jpeg(const char *path, const uint8_t *jpg, size_t jpg_len,
+int dermedge_hub_post_jpeg(const char *path, const uint8_t *jpg, size_t jpg_len,
                             char *resp, size_t resp_len)
 {
     static const char head[] = "--" BOUNDARY "\r\n"
@@ -150,7 +150,7 @@ int skincheck_hub_post_jpeg(const char *path, const uint8_t *jpg, size_t jpg_len
     return finish(c, resp, resp_len);
 }
 
-int skincheck_hub_post_json(const char *path, const char *json, size_t json_len,
+int dermedge_hub_post_json(const char *path, const char *json, size_t json_len,
                             char *resp, size_t resp_len)
 {
     esp_http_client_handle_t c = open_post(path, "application/json", json_len);

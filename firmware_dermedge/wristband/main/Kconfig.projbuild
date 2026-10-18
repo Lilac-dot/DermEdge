@@ -1,43 +1,43 @@
-menu "SkinCheck wristband"
+menu "DermEdge wristband"
 
-    config SKINCHECK_WINDOW_SECONDS
+    config DERMEDGE_WINDOW_SECONDS
         int "Window length (s)"
         default 30
         help
             The stress model was trained on 30 s WESAD windows. Each finished window is POSTed
             to the hub's /api/wearable/window; the hub's first 3 calibrate it to the wearer.
 
-    choice SKINCHECK_GSR_SOURCE
+    choice DERMEDGE_GSR_SOURCE
         prompt "Skin conductance (GSR) source"
-        default SKINCHECK_GSR_SIMULATED
-        config SKINCHECK_GSR_SIMULATED
+        default DERMEDGE_GSR_SIMULATED
+        config DERMEDGE_GSR_SIMULATED
             bool "Simulated (BOOT button toggles calm / stressed)"
-        config SKINCHECK_GSR_GROVE
+        config DERMEDGE_GSR_GROVE
             bool "Grove GSR module on an ADC pin"
     endchoice
 
-    config SKINCHECK_GSR_ADC_CHANNEL
+    config DERMEDGE_GSR_ADC_CHANNEL
         int "GSR ADC1 channel (6 = GPIO34)"
-        depends on SKINCHECK_GSR_GROVE
+        depends on DERMEDGE_GSR_GROVE
         default 6
         range 0 7
 
-    choice SKINCHECK_MOISTURE_SOURCE
+    choice DERMEDGE_MOISTURE_SOURCE
         prompt "Skin moisture patch source"
-        default SKINCHECK_MOISTURE_SIMULATED
-        config SKINCHECK_MOISTURE_SIMULATED
+        default DERMEDGE_MOISTURE_SIMULATED
+        config DERMEDGE_MOISTURE_SIMULATED
             bool "Simulated (eczema patch ~6% drier than reference)"
-        config SKINCHECK_MOISTURE_TOUCH
+        config DERMEDGE_MOISTURE_TOUCH
             bool "ESP32 touch pins as capacitive electrodes"
             help
                 A crude stand-in for the Southampton e-textile sensor: one electrode taped over
                 the eczema-prone area (T0 = GPIO4), one over healthy skin (T3 = GPIO15). Wetter
                 skin adds capacitance and lowers the touch reading.
-        config SKINCHECK_MOISTURE_OFF
+        config DERMEDGE_MOISTURE_OFF
             bool "No moisture patch"
     endchoice
 
-    config SKINCHECK_STRESS_BUTTON_GPIO
+    config DERMEDGE_STRESS_BUTTON_GPIO
         int "Calm/stressed toggle button GPIO (simulated GSR)"
         default 0
         help

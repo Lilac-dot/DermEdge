@@ -1,8 +1,8 @@
-// SkinCheck wristband on a plain ESP32.
+// DermEdge wristband on a plain ESP32.
 //
 // Samples at the Empatica E4 rates the WESAD stress model was trained on -- skin conductance
 // (GSR/EDA) and skin temperature at 4 Hz, PPG (BVP) at 64 Hz, accelerometer at 32 Hz -- and
-// every CONFIG_SKINCHECK_WINDOW_SECONDS POSTs the raw window to the laptop hub's
+// every CONFIG_DERMEDGE_WINDOW_SECONDS POSTs the raw window to the laptop hub's
 // /api/wearable/window, where the stress model runs (the hub calibrates it on the first 3
 // windows, so start calm). The moisture patch goes to /api/wearable/moisture.
 //
@@ -19,12 +19,12 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "signals.h"
-#include "skincheck_net.h"
+#include "dermedge_net.h"
 
 static const char *TAG = "wristband";
 
 #define SAMPLE_HZ 64
-#define WIN_S CONFIG_SKINCHECK_WINDOW_SECONDS
+#define WIN_S CONFIG_DERMEDGE_WINDOW_SECONDS
 #define N_BVP (WIN_S * 64)
 #define N_ACC (WIN_S * 32)
 #define N_EDA (WIN_S * 4)
@@ -53,7 +53,7 @@ static void sample_tick(void *arg)
     // BOOT button: falling edge toggles the simulated calm/stressed state (debounced).
     static int last_level = 1;
     static uint32_t last_press = 0;
-    int level = gpio_get_level(CONFIG_SKINCHECK_STRESS_BUTTON_GPIO);
+    int level = gpio_get_level(CONFIG_DERMEDGE_STRESS_BUTTON_GPIO);
     if (level == 0 && last_level == 1 && s_total_ticks - last_press > SAMPLE_HZ / 4) {
         signals_set_stressed(!signals_stressed());
         last_press = s_total_ticks;
@@ -143,7 +143,7 @@ static void sender_task(void *arg)
             ESP_LOGE(TAG, "window JSON overflowed %d bytes", JSON_CAP);
             continue;
         }
-        int status = skincheck_hub_post_json("/api/wearable/window", json, pos, resp, sizeof(resp));
+        int status = dermedge_hub_post_json("/api/wearable/window", json, pos, resp, sizeof(resp));
         windows_sent++;
         ESP_LOGI(TAG, "window %d (%s) -> HTTP %d%s", windows_sent,
                  signals_stressed() ? "stressed" : "calm", status,
@@ -156,7 +156,7 @@ static void sender_task(void *arg)
             pos = append_floats(json, pos, "reference", w->ref, w->n_moist, "%.2f");
             pos = append(json, pos, "}");
             if (pos > 0) {
-                status = skincheck_hub_post_json("/api/wearable/moisture", json, pos, resp, sizeof(resp));
+                status = dermedge_hub_post_json("/api/wearable/moisture", json, pos, resp, sizeof(resp));
                 ESP_LOGI(TAG, "moisture (%d readings) -> HTTP %d", w->n_moist, status);
             }
         }
@@ -166,7 +166,7 @@ static void sender_task(void *arg)
 void app_main(void)
 {
     gpio_config_t btn = {
-        .pin_bit_mask = 1ULL << CONFIG_SKINCHECK_STRESS_BUTTON_GPIO,
+        .pin_bit_mask = 1ULL << CONFIG_DERMEDGE_STRESS_BUTTON_GPIO,
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
     };
@@ -177,8 +177,8 @@ void app_main(void)
     }
     ESP_LOGW(TAG, "skin temperature, PPG and accelerometer are simulated until those sensors are wired");
 
-    while (skincheck_wifi_connect(20000) != ESP_OK) {
-        ESP_LOGW(TAG, "can't join \"%s\" yet, retrying", CONFIG_SKINCHECK_WIFI_SSID);
+    while (dermedge_wifi_connect(20000) != ESP_OK) {
+        ESP_LOGW(TAG, "can't join \"%s\" yet, retrying", CONFIG_DERMEDGE_WIFI_SSID);
     }
 
     s_ready = xQueueCreate(1, sizeof(int));

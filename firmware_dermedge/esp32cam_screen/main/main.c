@@ -1,8 +1,8 @@
-// SkinCheck tier 1 on an AI-Thinker ESP32-CAM.
+// DermEdge tier 1 on an AI-Thinker ESP32-CAM.
 //
-// Every CONFIG_SKINCHECK_CAPTURE_PERIOD_MS: capture a JPEG, decide normal vs eczema/rash
+// Every CONFIG_DERMEDGE_CAPTURE_PERIOD_MS: capture a JPEG, decide normal vs eczema/rash
 // (on device with the INT8 model, or on the laptop hub), light the red LED while positive,
-// and after CONFIG_SKINCHECK_POSITIVE_STREAK positives in a row send the photo to the hub's
+// and after CONFIG_DERMEDGE_POSITIVE_STREAK positives in a row send the photo to the hub's
 // /api/analyze -- eczema vs look-alikes, severity, flare risk, history -- which then shows
 // on the dashboard. Nothing leaves the local network.
 #include <stdio.h>
@@ -18,9 +18,9 @@
 #include "freertos/task.h"
 #include "img_converters.h"
 #include "screen_model.h"
-#include "skincheck_net.h"
+#include "dermedge_net.h"
 
-static const char *TAG = "skincheck_cam";
+static const char *TAG = "dermedge_cam";
 
 // AI-Thinker ESP32-CAM pin map
 #define CAM_PIN_PWDN 32
@@ -46,17 +46,17 @@ static const char *TAG = "skincheck_cam";
 #define FRAME_H 240
 
 // Kconfig leaves a bool option undefined when it is off, so turn each into a 0/1 constant.
-#ifdef CONFIG_SKINCHECK_SCREEN_ON_DEVICE
+#ifdef CONFIG_DERMEDGE_SCREEN_ON_DEVICE
 #define SCREEN_ON_DEVICE 1
 #else
 #define SCREEN_ON_DEVICE 0
 #endif
-#ifdef CONFIG_SKINCHECK_SWAP_RB
+#ifdef CONFIG_DERMEDGE_SWAP_RB
 #define SWAP_RB true
 #else
 #define SWAP_RB false
 #endif
-#ifdef CONFIG_SKINCHECK_FLASH_DURING_CAPTURE
+#ifdef CONFIG_DERMEDGE_FLASH_DURING_CAPTURE
 #define FLASH_DURING_CAPTURE 1
 #else
 #define FLASH_DURING_CAPTURE 0
@@ -121,7 +121,7 @@ static float screen_frame(camera_fb_t *fb, uint8_t *rgb)
     return p;
 #else
     static char resp[256];
-    int status = skincheck_hub_post_jpeg("/api/screen", fb->buf, fb->len, resp, sizeof(resp));
+    int status = dermedge_hub_post_jpeg("/api/screen", fb->buf, fb->len, resp, sizeof(resp));
     if (status != 200) {
         ESP_LOGW(TAG, "hub screen failed (HTTP %d)", status);
         return -1.f;
@@ -144,7 +144,7 @@ static void send_for_analysis(camera_fb_t *fb)
 {
     static char resp[2048];
     ESP_LOGI(TAG, "sending %u-byte photo for full analysis", (unsigned)fb->len);
-    int status = skincheck_hub_post_jpeg("/api/analyze?source=esp32", fb->buf, fb->len, resp, sizeof(resp));
+    int status = dermedge_hub_post_jpeg("/api/analyze?source=esp32", fb->buf, fb->len, resp, sizeof(resp));
     if (status != 200) {
         ESP_LOGW(TAG, "hub analyze failed (HTTP %d)", status);
         return;
@@ -178,13 +178,13 @@ void app_main(void)
     }
 #endif
     // Without the hub the on-device screen still works and drives the LED.
-    bool online = skincheck_wifi_connect(20000) == ESP_OK;
+    bool online = dermedge_wifi_connect(20000) == ESP_OK;
     if (!online) {
         ESP_LOGW(TAG, "no WiFi -- screening locally only, nothing will be sent");
     }
     led_red(false);
 
-    const float threshold = CONFIG_SKINCHECK_THRESHOLD_PERCENT / 100.f;
+    const float threshold = CONFIG_DERMEDGE_THRESHOLD_PERCENT / 100.f;
     int streak = 0;
     int64_t last_sent_us = -1;
     TickType_t wake = xTaskGetTickCount();
@@ -203,14 +203,14 @@ void app_main(void)
             led_red(positive);
             streak = positive ? streak + 1 : 0;
             bool cooled = last_sent_us < 0 ||
-                          esp_timer_get_time() - last_sent_us > CONFIG_SKINCHECK_COOLDOWN_S * 1000000LL;
-            if (online && streak >= CONFIG_SKINCHECK_POSITIVE_STREAK && cooled) {
+                          esp_timer_get_time() - last_sent_us > CONFIG_DERMEDGE_COOLDOWN_S * 1000000LL;
+            if (online && streak >= CONFIG_DERMEDGE_POSITIVE_STREAK && cooled) {
                 send_for_analysis(fb);
                 last_sent_us = esp_timer_get_time();
                 streak = 0;
             }
             esp_camera_fb_return(fb);
         }
-        vTaskDelayUntil(&wake, pdMS_TO_TICKS(CONFIG_SKINCHECK_CAPTURE_PERIOD_MS));
+        vTaskDelayUntil(&wake, pdMS_TO_TICKS(CONFIG_DERMEDGE_CAPTURE_PERIOD_MS));
     }
 }

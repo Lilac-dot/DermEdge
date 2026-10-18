@@ -1,17 +1,17 @@
-menu "SkinCheck network"
+menu "DermEdge network"
 
-    config SKINCHECK_WIFI_SSID
+    config DERMEDGE_WIFI_SSID
         string "WiFi name (SSID)"
-        default "SkinCheck"
+        default "DermEdge"
         help
             The network the laptop hub is on -- e.g. the laptop's own hotspot, so nothing
             touches the internet.
 
-    config SKINCHECK_WIFI_PASSWORD
+    config DERMEDGE_WIFI_PASSWORD
         string "WiFi password"
         default "changeme123"
 
-    config SKINCHECK_HUB_URL
+    config DERMEDGE_HUB_URL
         string "Hub URL (no trailing slash)"
         default "http://192.168.2.1:8000"
         help

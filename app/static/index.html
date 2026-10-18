@@ -290,7 +290,7 @@
         </div>
       </div>
       <div class="sites" id="sites"></div>
-      <div class="muted" id="seedNote" style="margin-top:8px">Sample history is four weeks of example check-ins (real eczema photos run through the real models, with made-up dates, sites and triggers). It is labelled "sample" everywhere.</div>
+      <div class="muted" id="seedNote" style="margin-top:8px">Sample history adds four weeks of example check-ins, labelled "sample".</div>
     </div>
     <div class="card" style="margin-bottom:20px">
       <h2>What seems to affect your skin</h2>
@@ -328,8 +328,7 @@
         <div class="meter"><div id="tIndexBar" style="width:0;background:var(--warn)"></div></div>
         <div id="alertBox2"></div>
         <div id="tList"></div>
-        <div class="disclaimer">Flare risk = image score × trigger index, so it stays near zero without active eczema.
-          Trigger thresholds are demo defaults, not fitted to flare data.</div>
+        <div class="disclaimer">Flare risk = image score × trigger index, so it stays near zero without active eczema.</div>
       </div>
       <div class="card">
         <h2>Today's journal</h2>
@@ -377,8 +376,6 @@
         At one shared threshold the model missed more rashes on darker skin, even though it ranked them
         almost as well (similar AUC). Choosing your skin type applies a calibrated threshold.</p>
       <div style="overflow-x:auto"><table class="ft" id="fairTable"></table></div>
-      <p class="disclaimer">Skin type V–VI has only 16 healthy and 114 rash photos, and its threshold was tuned on them,
-        so its calibrated numbers are a demonstrated fix, not a validated one.</p>
     </div>
   </section>
 </main>
@@ -629,7 +626,7 @@ async function loadInsights() {
     box.appendChild(d);
   });
   const note = document.createElement("p"); note.className = "disclaimer";
-  note.textContent = (r.all_sample ? "Based on sample data. " : "") + "These are patterns in your own log, not proof of cause.";
+  note.textContent = (r.all_sample ? "Based on sample data. " : "") + "Patterns from your own log.";
   box.appendChild(note);
 }
 

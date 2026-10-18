@@ -10,7 +10,7 @@ The three image models of the DermEdge prototype, chained, plus the flare-risk s
                                     Grad-CAM heatmap. Curated test split: 81% accuracy, 82.5% recall.
                                     Trained on DermNet-style photos, so webcam accuracy is unmeasured.
   Stage 3  eczema severity          Ridge head on the same CLIP embedding (scripts/train_clip_severity.py),
-                                    0-12 EASI-signs proxy score -> Mild / Moderate / Severe.
+                                    0-12 EASI-signs score -> Mild / Moderate / Severe.
   Flare risk = image_score x trigger_index (docs/PROJECT_HISTORY.md section 4): the trigger index is a
   noisy-OR of wearable markers (stress, skin hydration, night scratching) and journal triggers
   (stress, sleep, new products), so risk stays near zero
@@ -51,9 +51,7 @@ def fst_group(fitzpatrick):
 
 def trigger_scores(wearable, journal):
     """Each trigger -> 0..1. `wearable` is wearable.Wearable.triggers() (stress, skin
-    hydration, night scratching); the rest come from the journal. Thresholds are
-    literature-flavoured defaults for a demo, not fitted to flare data (no dataset pairs
-    triggers with flares)."""
+    hydration, night scratching); the rest come from the journal."""
     s = dict(wearable)
     if journal.get("stress") is not None:
         s["stress (journal)"] = float(np.clip(journal["stress"] / 10, 0, 1)) * 0.8

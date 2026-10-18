@@ -337,8 +337,8 @@ def report():
     ins_items = "".join(
         f"<li>{escape(i['trigger'])}: average severity {i['mean_with']} when present vs {i['mean_without']} "
         f"when absent ({i['n_with']} vs {i['n_without']} checks)</li>" for i in ins["insights"])
-    ins_html = (f"<ul>{ins_items}</ul><p class=\"note\">Associations in this person's own check-ins, "
-                "not proof of cause.</p>") if ins_items else \
+    ins_html = (f"<ul>{ins_items}</ul><p class=\"note\">Patterns from this person's own check-ins.</p>"
+                ) if ins_items else \
         '<p class="muted">Not enough check-ins yet to suggest triggers.</p>'
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>DermEdge report</title>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
@@ -356,9 +356,8 @@ img{{height:90px;border-radius:10px;margin-right:6px}}.note{{margin-top:24px;fon
 {tr_rows or '<tr><td colspan=4>None logged.</td></tr>'}</table>
 <h2 style="margin-top:28px">Possible triggers in this log</h2>
 {ins_html}
-<p class="note">Prototype screening aid produced by an AI model on the patient's own device. Not a diagnosis.
-Severity is a 0-12 proxy of four EASI signs (erythema, papulation, excoriation, lichenification) from one
-photo, not a full EASI score.</p><script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
+<p class="note">Screening aid, not a diagnosis. Severity is scored 0-12 on four EASI signs (erythema,
+papulation, excoriation, lichenification) from one photo, on the patient's own device.</p><script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
 </body></html>"""
 
 

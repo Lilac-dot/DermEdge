@@ -14,8 +14,7 @@ Markers
   night scratch   wrist-IMU scratch bursts. SIMULATED ONLY: there is no public scratch dataset
                   (dead_ends/negative_results/scratch_dataset_search_2026-08-26.md).
 
-Simulator scenarios replay WESAD subject S16 (calibrated AUC 0.998 -- in-sample, the
-deployed model was trained on all 15 subjects) and Southampton patients S-08 (1.7% deficit)
+Simulator scenarios replay WESAD subject S16 and Southampton patients S-08 (1.7% deficit)
 / S-05 (10.2%), at 15x speed (a 30 s window every 2 s).
 """
 import ctypes

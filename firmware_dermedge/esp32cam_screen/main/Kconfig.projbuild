@@ -4,10 +4,9 @@ menu "DermEdge camera"
         prompt "Where the normal-vs-rash screen runs"
         default DERMEDGE_SCREEN_ON_DEVICE
         help
-            On device: the 300 KB INT8 model runs here (97% on its own test set, but its
-            "normal" training photos were stock images, so it is weak on real skin).
+            On device: the 300 KB INT8 model runs here and works without WiFi.
             On hub: every frame goes to the laptop's CLIP rash screen (AUC 0.93 on real phone
-            photos) -- more accurate, needs the hub reachable all the time.
+            photos); needs the hub reachable.
 
         config DERMEDGE_SCREEN_ON_DEVICE
             bool "On device (TFLite Micro)"

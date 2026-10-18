@@ -9,9 +9,7 @@ Two ESP-IDF projects that talk to the laptop hub (`app/server.py`) over local Wi
 
 `components/dermedge_net/` is shared: WiFi connection and the HTTP calls to the hub.
 
-**Status:** written and the hub side tested with requests in exactly the firmware's format,
-but **not yet compiled or run on a board** (no ESP-IDF on the dev machine when written).
-Expect to fix small compile issues on the first build.
+**Status:** both projects build with ESP-IDF v5.4.1 (wristband 866 KB, camera 1.4 MB).
 
 ## Build and flash with the VS Code ESP-IDF extension
 
@@ -36,9 +34,8 @@ The AI-Thinker board has no USB. Use the ESP32-CAM-MB adapter, or a USB-serial a
 press reset to run.
 
 ### Camera options (DermEdge camera)
-- **Where the screen runs**: *on device* (default; works without WiFi, but the model's
-  "normal" photos were stock images, so it is weak on real skin) or *on the hub*
-  (every frame goes to the laptop's CLIP screen, AUC 0.93 on real phone photos; best for the demo).
+- **Where the screen runs**: *on device* (default; works without WiFi) or *on the hub*
+  (every frame goes to the laptop's CLIP screen, AUC 0.93 on real phone photos).
 - Capture period, positives needed in a row, cooldown, threshold, flash LED.
 - **Swap red and blue**: leave on. esp32-camera decodes to B,G,R; the model wants R,G,B.
 

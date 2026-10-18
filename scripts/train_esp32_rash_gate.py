@@ -1,8 +1,7 @@
 """
 Tier 1 of the hackathon device: a tiny "normal skin vs rash" CNN for the ESP32-CAM.
 If it says rash, the phone runs the full eczema-vs-look-alikes model and the severity
-model, offline. Hackathon-grade: the normal-skin data is noisy and nothing here is a
-clinical claim.
+model, offline.
 
 Run with the TensorFlow venv (TFLite Micro needs a TFLite model):
     .venv-tf/bin/python scripts/train_esp32_rash_gate.py

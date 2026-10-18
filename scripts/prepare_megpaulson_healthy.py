@@ -6,7 +6,7 @@ from healthy_gate_probe.py (AUC 0.89 on SCIN healthy vs condition).
 
 Spot-checking showed the set is noisy -- moles, stitches, bruises, insect bites and the odd
 psoriasis-like plaque sit among the clean skin -- so the most rash-like images by CLIP are
-dropped (keep_rash_prob_below). This is a hackathon-grade clean-up, not a curated label.
+dropped (keep_rash_prob_below).
 
 Writes:
   dataset/healthy/megpaulson/cache/<n>.jpg

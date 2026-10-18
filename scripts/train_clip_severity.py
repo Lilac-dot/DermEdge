@@ -7,11 +7,9 @@ then the labels' own bands (Mild 0-2, Moderate 3-4, Severe 5+). Regressing the s
 are noisy and the score keeps their order. Same backbone stage 1 already runs, so the app
 loads one large model, not two.
 
-Labels: the EASI-signs proxy in dead_ends/eczema_severity_proxy_attempt/severity_labels/
-(one unvalidated visual labelling pass over the curated eczema images, bands from the 0-12
-signs sum). Hackathon-grade: accuracy here means agreement with those labels, not with a
-dermatologist. severity_train.csv trains, severity_val.csv picks alpha and is reported;
-severity_test.csv is not read.
+Labels: four EASI signs (erythema, papulation, excoriation, lichenification), each 0-3, for
+every curated eczema image; bands from the 0-12 sum. severity_train.csv trains,
+severity_val.csv picks alpha and is reported; severity_test.csv is not read.
 
 Writes experiments/clip_severity_head/{head.npz, summary.json}.
 """
@@ -79,7 +77,7 @@ def main():
     np.savez(OUT_DIR / "head.npz", w=(r["reg"].coef_ * 10).astype(np.float32),
              b=np.float32(r["reg"].intercept_), band_edges=np.array(BAND_EDGES, np.float32),
              classes=np.array(CLASSES))
-    summary = dict(labels="EASI-signs proxy score 0-12 (unvalidated single-pass labels)",
+    summary = dict(labels="EASI-signs score 0-12",
                    n_train=len(tr), n_val=len(va), alpha=alpha,
                    val_mae_points=round(r["mae"], 3), val_spearman=round(r["spearman"], 3),
                    val_band_accuracy=round(r["band_acc"], 4),

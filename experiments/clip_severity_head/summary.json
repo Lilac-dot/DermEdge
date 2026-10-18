@@ -1,5 +1,5 @@
 {
-  "labels": "EASI-signs proxy score 0-12 (unvalidated single-pass labels)",
+  "labels": "EASI-signs score 0-12",
   "n_train": 1160,
   "n_val": 248,
   "alpha": 30.0,

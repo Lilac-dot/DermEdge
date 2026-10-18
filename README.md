@@ -1,8 +1,14 @@
 # DermEdge
 
-**Offline eczema screening and flare tracking: a camera, a wearable, and a laptop hub. No cloud, no internet; photos never leave the device.**
+**Private eczema screening and flare tracking: a camera, a wearable, and AI that runs on your own device. No cloud; photos never leave the device.**
 
-DermEdge checks a photo of skin in three stages, tracks each body site over time, and combines the result with wearable stress and skin-moisture markers into a daily flare-risk score with tips. It is a hackathon prototype and a screening aid, not a diagnosis.
+DermEdge checks a photo of skin in three stages, tracks each body site over time, and combines the result with wearable stress and skin-moisture markers into a daily flare-risk score with tips. It runs on a laptop hub or entirely in the browser.
+
+Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the **Telemedicon 2026 AI & Digital Health Hackathon**, IIIT Sri City.
+
+| Check | History | Wearable & care |
+|---|---|---|
+| ![Live check: rash detected, eczema vs look-alikes, severity and heatmap](docs/check.jpg) | ![History: progress by body site and trigger insights](docs/history.jpg) | ![Wearable: stress, heart rate, hydration deficit and a flare alert](docs/wearable.jpg) |
 
 ## How it works
 
@@ -28,7 +34,7 @@ Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis
 At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI, even though it ranked them almost as well (AUC 0.91 vs 0.93). Choosing your skin type applies a calibrated threshold, which brings V–VI to **83%**. Details: `experiments/clip_rash_head/summary.json`.
 
 ## Features
-- Live camera with a normal/rash badge; auto-analyses when a rash is held in view
+- Live camera with a rash / no-rash badge; auto-analyses when a rash is held in view
 - Photo quality check: asks for a retake when the photo is blurry, too dark or washed out
 - Grad-CAM heatmap of where the eczema model looked
 - "Not sure, see a dermatologist" when the models disagree or are uncertain

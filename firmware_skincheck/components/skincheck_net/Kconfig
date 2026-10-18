@@ -1,0 +1,22 @@
+menu "SkinCheck network"
+
+    config SKINCHECK_WIFI_SSID
+        string "WiFi name (SSID)"
+        default "SkinCheck"
+        help
+            The network the laptop hub is on -- e.g. the laptop's own hotspot, so nothing
+            touches the internet.
+
+    config SKINCHECK_WIFI_PASSWORD
+        string "WiFi password"
+        default "changeme123"
+
+    config SKINCHECK_HUB_URL
+        string "Hub URL (no trailing slash)"
+        default "http://192.168.2.1:8000"
+        help
+            Where app/server.py runs: http://<laptop IP on that network>:8000. On macOS the IP is in
+            System Settings > Wi-Fi > Details; on a macOS hotspot (Internet Sharing) it is
+            usually 192.168.2.1.
+
+endmenu

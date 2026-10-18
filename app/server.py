@@ -20,8 +20,10 @@ Endpoints
                                recorded data instead of hardware (app/wearable.py)
   POST /api/journal       JSON {stress 0-10, sleep_hours, new_product, notes}
   GET  /api/state         wearable markers + journal + trigger scores
-  GET/POST /api/settings  {fitzpatrick: 1-6 or null} -- self-reported skin type; stage 1 then uses
-                          that group's calibrated threshold
+  GET/POST /api/settings  {fitzpatrick: 1-6 or null, sites: [...], consent, onboarded} -- partial
+                          updates; the skin type selects stage 1's calibrated threshold
+  POST /api/treatment     JSON {kind, notes?, site?} -- log a treatment; GET /api/treatments lists them
+  GET  /api/insights      trigger associations from the user's own check-ins
   GET  /api/fairness      stage-1 performance by skin type, before and after calibration
   GET  /api/history       all past analyses
   GET  /api/sites         first vs latest severity per body site
@@ -67,7 +69,8 @@ pipeline = SkinPipeline()
 wearable = Wearable()
 simulator = Simulator(wearable)
 state = {"journal": {}, "journal_at": None}
-settings = json.loads(SETTINGS_PATH.read_text()) if SETTINGS_PATH.exists() else {"fitzpatrick": None}
+SETTINGS_DEFAULT = {"fitzpatrick": None, "sites": [], "consent": False, "onboarded": False}
+settings = dict(SETTINGS_DEFAULT, **(json.loads(SETTINGS_PATH.read_text()) if SETTINGS_PATH.exists() else {}))
 
 
 def db():
@@ -75,6 +78,8 @@ def db():
     con.execute("""CREATE TABLE IF NOT EXISTS analyses (
         id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, source TEXT, verdict TEXT,
         result TEXT, image TEXT, heatmap TEXT)""")
+    con.execute("""CREATE TABLE IF NOT EXISTS treatments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, kind TEXT, notes TEXT, site TEXT, sample INTEGER)""")
     return con
 
 
@@ -105,6 +110,15 @@ class Sim(BaseModel):
 
 class Settings(BaseModel):
     fitzpatrick: Optional[int] = None
+    sites: Optional[List[str]] = None
+    consent: Optional[bool] = None
+    onboarded: Optional[bool] = None
+
+
+class Treatment(BaseModel):
+    kind: str
+    notes: str = ""
+    site: Optional[str] = None
 
 
 class Journal(BaseModel):
@@ -214,9 +228,42 @@ def get_settings():
 
 @app.post("/api/settings")
 def set_settings(s: Settings):
-    settings["fitzpatrick"] = s.fitzpatrick if s.fitzpatrick in range(1, 7) else None
+    """Partial update: only the fields sent change."""
+    new = s.model_dump(exclude_unset=True)
+    if "fitzpatrick" in new:
+        settings["fitzpatrick"] = new["fitzpatrick"] if new["fitzpatrick"] in range(1, 7) else None
+    if new.get("sites") is not None:
+        settings["sites"] = [x for x in new["sites"] if x in features.BODY_SITES]
+    if new.get("consent") is not None:
+        settings["consent"] = bool(new["consent"])
+        settings["consent_at"] = time.time() if new["consent"] else None
+    if new.get("onboarded") is not None:
+        settings["onboarded"] = bool(new["onboarded"])
     SETTINGS_PATH.write_text(json.dumps(settings))
     return settings
+
+
+@app.post("/api/treatment")
+def log_treatment(t: Treatment):
+    kind = t.kind if t.kind in features.TREATMENTS else "other"
+    site = t.site if t.site in features.BODY_SITES else None
+    with db() as con:
+        con.execute("INSERT INTO treatments (ts, kind, notes, site, sample) VALUES (?, ?, ?, ?, 0)",
+                    (time.time(), kind, t.notes[:200], site))
+    return treatments()
+
+
+@app.get("/api/treatments")
+def treatments():
+    with db() as con:
+        rows = con.execute("SELECT id, ts, kind, notes, site, sample FROM treatments ORDER BY ts").fetchall()
+    items = [dict(id=r[0], ts=r[1], kind=r[2], notes=r[3], site=r[4], sample=bool(r[5])) for r in rows]
+    return dict(treatments=items, summary=features.treatment_summary(items), kinds=features.TREATMENTS)
+
+
+@app.get("/api/insights")
+def insights():
+    return features.insights(history())
 
 
 @app.get("/api/fairness")
@@ -242,12 +289,15 @@ def sites():
 def demo_seed():
     demo_clear()
     try:
-        entries = features.sample_history(pipeline)
+        entries, sample_treatments = features.sample_history(pipeline)
     except FileNotFoundError as e:
         return dict(added=0, error=str(e))
     for ts, res, heat, img in entries:
         save_result(res, heat, img, ts, "sample")
-    return dict(added=len(entries))
+    with db() as con:
+        con.executemany("INSERT INTO treatments (ts, kind, notes, site, sample) VALUES (?, ?, '', ?, 1)",
+                        sample_treatments)
+    return dict(added=len(entries), treatments=len(sample_treatments))
 
 
 @app.post("/api/demo/clear")
@@ -255,6 +305,7 @@ def demo_clear():
     with db() as con:
         rows = con.execute("SELECT id, image, heatmap FROM analyses WHERE source = 'sample'").fetchall()
         con.execute("DELETE FROM analyses WHERE source = 'sample'")
+        con.execute("DELETE FROM treatments WHERE sample = 1")
     for _, image, heat in rows:
         for url in (image, heat):
             if url:
@@ -277,15 +328,34 @@ def report():
                     f"<td>{escape(h['headline'])}</td><td>{sev}</td><td>{flare}</td></tr>")
     trig = api_state()["triggers"]
     trig_txt = ", ".join(f"{k} {v:.2f}" for k, v in trig.items()) or "none logged"
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>SkinCheck report</title>
-<style>body{{font-family:-apple-system,Segoe UI,sans-serif;margin:32px;color:#1d2433}}
-h1{{margin:0 0 4px}}.muted{{color:#667085}}table{{border-collapse:collapse;width:100%;margin-top:16px}}
-td,th{{border-bottom:1px solid #e4e7ec;padding:8px;text-align:left;vertical-align:top;font-size:14px}}
-img{{height:90px;border-radius:6px;margin-right:6px}}.note{{margin-top:24px;font-size:12px;color:#667085}}</style>
-</head><body><h1>SkinCheck - skin history report</h1>
+    tr = treatments()
+    tr_rows = "".join(
+        f"<tr><td>{time.strftime('%d %b %Y %H:%M', time.localtime(t['ts']))}{' <i>(sample)</i>' if t['sample'] else ''}</td>"
+        f"<td>{escape(t['kind'].replace('_', ' '))}</td><td>{escape((t['site'] or '-').replace('_', ' '))}</td>"
+        f"<td>{escape(t['notes'] or '')}</td></tr>" for t in reversed(tr["treatments"]))
+    ins = features.insights(history())
+    ins_items = "".join(
+        f"<li>{escape(i['trigger'])}: average severity {i['mean_with']} when present vs {i['mean_without']} "
+        f"when absent ({i['n_with']} vs {i['n_without']} checks)</li>" for i in ins["insights"])
+    ins_html = (f"<ul>{ins_items}</ul><p class=\"note\">Associations in this person's own check-ins, "
+                "not proof of cause.</p>") if ins_items else \
+        '<p class="muted">Not enough check-ins yet to suggest triggers.</p>'
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>DermEdge report</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<style>body{{font-family:Figtree,-apple-system,Segoe UI,sans-serif;margin:32px;color:#3a1f2b;background:#fff}}
+h1,h2{{font-family:"Young Serif",Georgia,serif;font-weight:400;color:#8e2a57}}h1{{margin:0 0 4px}}
+.muted{{color:#8b6474}}table{{border-collapse:collapse;width:100%;margin-top:16px}}
+th{{color:#8b6474;font-weight:600}}td,th{{border-bottom:1px solid #f4d4df;padding:8px;text-align:left;vertical-align:top;font-size:14px}}
+img{{height:90px;border-radius:10px;margin-right:6px}}.note{{margin-top:24px;font-size:12px;color:#8b6474}}</style>
+</head><body><h1>DermEdge &middot; skin history report</h1>
 <div class="muted">Generated {time.strftime('%d %b %Y %H:%M')} - {len(items)} checks - current triggers: {escape(trig_txt)}</div>
 <table><tr><th>When</th><th>Body site</th><th>Photo / heatmap</th><th>Result</th><th>Severity</th><th>Flare risk</th></tr>
 {''.join(rows) or '<tr><td colspan=6>No checks yet.</td></tr>'}</table>
+<h2 style="margin-top:28px">Treatments</h2>
+<table><tr><th>When</th><th>Treatment</th><th>Body site</th><th>Notes</th></tr>
+{tr_rows or '<tr><td colspan=4>None logged.</td></tr>'}</table>
+<h2 style="margin-top:28px">Possible triggers in this log</h2>
+{ins_html}
 <p class="note">Prototype screening aid produced by an AI model on the patient's own device. Not a diagnosis.
 Severity is a 0-12 proxy of four EASI signs (erythema, papulation, excoriation, lichenification) from one
 photo, not a full EASI score.</p><script>window.onload=()=>setTimeout(()=>window.print(),400)</script>

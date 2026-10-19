@@ -55,13 +55,19 @@ export function init(onProgress) {
   return ready;
 }
 
+// ONNX Runtime sessions can't run twice at once ("Session already started"), and the webcam's
+// live check fires while an Analyze is still running, so model runs go through one queue.
+let queue = Promise.resolve();
+function serial(fn) { const run = queue.then(fn, fn); queue = run.catch(() => {}); return run; }
+
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 const sigmoid = z => 1 / (1 + Math.exp(-z));
 
 export async function bitmap(blob) { return createImageBitmap(blob, { imageOrientation: 'from-image' }); }
 
 async function clipEmbedding(blob) {
-  const { image_embeds } = await vision(await processor(await RawImage.fromBlob(blob)));
+  const inputs = await processor(await RawImage.fromBlob(blob));
+  const { image_embeds } = await serial(() => vision(inputs));
   const e = Array.from(image_embeds.data), n = Math.hypot(...e);
   return e.map(x => x / n);
 }
@@ -104,7 +110,7 @@ async function stage2Run(bmp) {
   const c = new OffscreenCanvas(224, 224), g = c.getContext('2d'); g.drawImage(bmp, 0, 0, 224, 224);
   const d = g.getImageData(0, 0, 224, 224).data, x = new Float32Array(3 * 224 * 224);
   for (let i = 0; i < 224 * 224; i++) for (let ch = 0; ch < 3; ch++) x[ch * 50176 + i] = (d[4 * i + ch] / 255 - MEAN[ch]) / STD[ch];
-  const out = await stage2.run({ image: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) });
+  const out = await serial(() => stage2.run({ image: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) }));
   const [l0, l1] = out.logits.data, p = 1 / (1 + Math.exp(l0 - l1));
   const f = out.features.data, dir = p >= 0.5 ? 1 : -1, cam = new Float32Array(49);
   for (let i = 0; i < 49; i++) { let s = 0; for (let ch = 0; ch < 512; ch++) s += fc.w[ch] * f[ch * 49 + i]; cam[i] = Math.max(0, dir * s); }

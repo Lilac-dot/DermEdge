@@ -175,7 +175,7 @@
   async function startSim(name) {
     clearInterval(sim.timer); sim = { scenario: null, timer: null, k: 0 };
     if (!SCEN[name]) return;
-    stressModel = stressModel || await realFetch('/models/stress_model.json').then(r => r.json());
+    stressModel = stressModel || await realFetch('/models/stress_model.json?v=2').then(r => r.json());
     wear = fresh(); sim.scenario = name;
     const cfg = SCEN[name];
     const tick = () => {
@@ -322,7 +322,7 @@ img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-s
     if (p === '/api/state') return json(state());
     if (p === '/api/sim') { const s = readJSON().scenario; await startSim(s); return json(state()); }
     if (p === '/api/fairness') {
-      const h = await realFetch('/models/heads.json').then(r => r.json());
+      const h = await realFetch('/models/heads.json?v=2').then(r => r.json());
       return json({ before: h.fairness.before, after: h.fairness.after, offsets: h.rash.fst_offsets });
     }
     if (p === '/api/demo/seed') return json(await seed());

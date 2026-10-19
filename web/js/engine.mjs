@@ -12,6 +12,9 @@ import { AutoProcessor, CLIPVisionModelWithProjection, RawImage, env } from 'htt
 
 env.allowLocalModels = false;
 const CLIP_ID = 'Xenova/clip-vit-base-patch16';
+// Bump when a file in web/models changes, so browsers that cached the old copy fetch the new one
+// (also bump the two ?v= in local-api.js).
+export const MODELS_V = 2;
 const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
 let processor, vision, stage2, text, heads, fc, ready, backend = '';
 
@@ -43,9 +46,9 @@ async function loadClip(onProgress) {
 export function init(onProgress) {
   if (!ready) ready = (async () => {
     report(onProgress, 'Loading DermEdge models…', 0);
-    [text, heads, fc] = await Promise.all(['clip_text', 'heads', 'stage2_fc'].map(n => fetch(`/models/${n}.json`).then(r => r.json())));
+    [text, heads, fc] = await Promise.all(['clip_text', 'heads', 'stage2_fc'].map(n => fetch(`/models/${n}.json?v=${MODELS_V}`).then(r => r.json())));
     window.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-    stage2 = await window.ort.InferenceSession.create('/models/stage2.onnx', { executionProviders: ['wasm'] });
+    stage2 = await window.ort.InferenceSession.create(`/models/stage2.onnx?v=${MODELS_V}`, { executionProviders: ['wasm'] });
     await loadClip(onProgress);
     report(onProgress, `Models ready (${backend})`, 1);
   })();

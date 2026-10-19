@@ -32,9 +32,10 @@ GSR wristband + moisture patch ─► stress, hydration, night scratching ──
 
 Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis, insect bites, lichen planus, drug eruption and rosacea.
 
-<img src="docs/stage2_confusion_matrix.png" width="420" alt="Stage 2 confusion matrix on the 507-image test split: 204 look-alikes and 207 eczema correct, 52 false eczema, 44 missed eczema">
-
-Stage 2 on the curated test split: of 251 eczema photos it caught 207 and missed 44; of 256 look-alikes it flagged 52 as eczema.
+| Stage 1: normal vs rash | Stage 2: eczema vs look-alikes |
+|---|---|
+| <img src="docs/stage1_confusion_matrix.png" width="400" alt="Stage 1 confusion matrix, SCIN 5-fold CV: 84 of 90 healthy cleared, 1182 of 1444 rashes caught"> | <img src="docs/stage2_confusion_matrix.png" width="400" alt="Stage 2 confusion matrix on the 507-image test split: 204 look-alikes and 207 eczema correct, 52 false eczema, 44 missed eczema"> |
+| Real phone photos (SCIN), held out by case: 1182 of 1444 rashes caught, 84 of 90 healthy photos cleared. | Curated test split: of 251 eczema photos it caught 207 and missed 44; of 256 look-alikes it flagged 52 as eczema. |
 
 ### Fair across skin tones
 At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI, even though it ranked them almost as well (AUC 0.91 vs 0.93). Choosing your skin type applies a calibrated threshold, which brings V–VI to **83%**. Details: `experiments/clip_rash_head/summary.json`.

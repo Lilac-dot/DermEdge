@@ -492,7 +492,11 @@ function show(r) {
   $("s1").querySelector(".v").textContent += r.calibrated_for ? ` (calibrated for ${r.calibrated_for})` : "";
   $("pics").innerHTML = `<figure><img src="${r.image}"><figcaption>Captured photo</figcaption></figure>` +
     (r.heatmap ? `<figure><img src="${r.heatmap}"><figcaption>Where stage 2 looked (heatmap)</figcaption></figure>` : "");
-  if (r.flare) {
+  if (r.flare && !Object.keys(r.triggers || {}).length) {
+    // risk = image x triggers, so with nothing logged it would always read 0.00
+    $("flareBox").innerHTML = `<div class="row"><span>Flare risk (image × triggers)</span><b>–</b></div>
+      <div class="muted">No trigger data yet. Start a wearable scenario or fill in today's journal, then check again.</div>`;
+  } else if (r.flare) {
     const risk = r.flare.risk, col = risk > 0.5 ? css("--bad") : risk > 0.2 ? css("--warn") : css("--ok");
     $("flareBox").innerHTML = `<div class="row"><span>Flare risk (image × triggers)</span><b>${risk.toFixed(2)}</b></div>
       <div class="meter"><div class="grow" style="width:0;background:${col}" data-w="${Math.min(100, risk * 100)}%"></div></div>

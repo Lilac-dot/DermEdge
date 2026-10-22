@@ -35,7 +35,8 @@
     get(k, d) { try { const v = localStorage.getItem('dermedge.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('dermedge.' + k, JSON.stringify(v)); } catch (e) { /* private mode: keep in memory */ } },
   };
-  let settings = ls.get('settings', { fitzpatrick: null, sites: [], consent: false, onboarded: false });
+  const DEFAULT_SETTINGS = { fitzpatrick: null, sites: [], consent: false, onboarded: false };
+  let settings = ls.get('settings', { ...DEFAULT_SETTINGS });
   let journal = ls.get('journal', {}), journalAt = ls.get('journal_at', null);
 
   // ---------- features (app/features.py, app/pipeline.py) ----------
@@ -230,6 +231,16 @@
     await removeWhere('treatments', t => t.sample);
     return { removed };
   }
+  // "Delete all my data": every check, treatment, journal entry and setting on this device. The
+  // downloaded models stay cached; they hold nothing about the user.
+  async function wipe() {
+    const removed = { checks: (await all('analyses')).length, treatments: (await all('treatments')).length };
+    await Promise.all(STORES.map(st => tx(st, 'readwrite', s => s.clear())));
+    ['settings', 'journal', 'journal_at'].forEach(k => { try { localStorage.removeItem('dermedge.' + k); } catch (e) { /* nothing stored */ } });
+    settings = { ...DEFAULT_SETTINGS }; journal = {}; journalAt = null;
+    await startSim(null); wear = fresh();
+    return { removed };
+  }
 
   // ---------- the doctor report (opened as its own printable page) ----------
   async function openReport() {
@@ -327,6 +338,7 @@ img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-s
     }
     if (p === '/api/demo/seed') return json(await seed());
     if (p === '/api/demo/clear') return json(await clear());
+    if (p === '/api/data/delete') return json(await wipe());
     return json({ error: 'not found' }, 404);
   }
 

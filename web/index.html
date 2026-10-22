@@ -162,6 +162,18 @@
   .insight { padding: 12px 14px; border-radius: 16px; background: var(--neutral-bg); margin-top: 10px; font-size: 14px; }
   .insight b { color: var(--berry); }
 
+  /* about: how DermEdge helps, limits, your data */
+  a { color: var(--accent); }
+  .lead { font-size: 16px; margin: 0; max-width: 70ch; }
+  .points { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+  .point { background: var(--neutral-bg); border-radius: 16px; padding: 14px 16px; font-size: 14px; }
+  .point h3 { font-size: 17px; margin: 0 0 4px; color: var(--berry); }
+  .privacy li span { display: block; color: var(--muted); font-size: 13px; }
+  .btn.danger { color: var(--bad); border-color: var(--bad); }
+  .btn.danger:hover { background: var(--bad-bg); }
+  .btn.danger.solid { background: var(--bad); color: #fff; font-weight: 600; }
+  .confirm { margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: var(--bad-bg); font-size: 14px; }
+
   /* onboarding */
   .overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px;
              background: rgba(40, 10, 24, .45); backdrop-filter: blur(4px); }
@@ -229,6 +241,7 @@
     <button data-tab="history">History</button>
     <button data-tab="triggers">Wearable &amp; care</button>
     <button data-tab="report">Doctor report</button>
+    <button data-tab="about">About</button>
   </nav>
 </header>
 
@@ -281,7 +294,8 @@
           <div id="compareBox"></div>
           <div id="alertBox"></div>
         </div>
-        <div class="disclaimer">Prototype screening aid, not a diagnosis. Photos are processed and stored on this device only.</div>
+        <div class="disclaimer">Prototype screening aid, not a diagnosis. Photos are processed and stored on this device only.
+          <a href="#about" data-goto="about">How accurate is this?</a></div>
       </div>
     </div>
   </section>
@@ -368,6 +382,7 @@
   <section class="tab" id="tab-report">
     <div class="card">
       <h2>Doctor report</h2>
+      <p class="lead">Your dermatologist sees your skin for a few minutes every few weeks. This report shows them the weeks in between.</p>
       <p class="muted">A printable summary of every check: photos, heatmaps, severity and flare risk. Use your browser's
         <b>Print → Save as PDF</b>.</p>
       <div style="display:flex;gap:24px;margin:16px 0;flex-wrap:wrap">
@@ -383,6 +398,53 @@
         At one shared threshold the model missed more rashes on darker skin, even though it ranked them
         almost as well (similar AUC). Choosing your skin type applies a calibrated threshold.</p>
       <div style="overflow-x:auto"><table class="ft" id="fairTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="tab" id="tab-about">
+    <div class="card">
+      <h2>Built to support your dermatologist, not replace them</h2>
+      <p class="lead">A dermatologist sees your skin for a few minutes every few weeks. Eczema flares build over days in between.
+        DermEdge records those days, so your doctor sees the trend, not a snapshot.</p>
+      <div class="points">
+        <div class="point"><h3>Consistent</h3>It scores the same photo the same way every time, so a change in the score is a change in your skin.</div>
+        <div class="point"><h3>Tracks between visits</h3>Daily check-ins per body site, alongside your treatments, journal and wearable triggers.</div>
+        <div class="point"><h3>Measurable change</h3>"I think it's better" becomes "inner elbow 6.1 → 4.3", something you and your doctor can act on.</div>
+        <div class="point"><h3>Explains itself</h3>The heatmap shows where the model looked, so your doctor can check its reasoning.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px" id="limits">
+      <h2>How accurate is this?</h2>
+      <p class="muted" style="margin-top:0">What we measured, and what we haven't yet. DermEdge is a screening aid: a dermatologist makes the diagnosis.</p>
+      <ul class="privacy">
+        <li>The rash screen misses about 1 in 6 rashes.
+          <span>It caught 1,182 of 1,444 rashes on real phone photos (SCIN), tested on people it never saw in training.</span></li>
+        <li>Eczema vs look-alikes is right about 4 times in 5.
+          <span>81% accuracy on 507 clinical photos. Accuracy on phone and webcam photos hasn't been measured yet.</span></li>
+        <li>Severity tends to rate mild eczema as moderate.
+          <span>Off by 1.2 points on average on the 0–12 scale, and within one band 98% of the time.</span></li>
+        <li>Darker skin needs your skin type to be set.
+          <span>On Fitzpatrick V–VI the screen caught 67% of rashes at the default setting and 83% once calibrated. See the Doctor report tab.</span></li>
+        <li>Flare risk is a designed score, not yet clinically validated.
+          <span>It multiplies the photo result by your triggers. Checking it against real flares needs a study over time.</span></li>
+        <li>The wristband is simulated in this browser version.
+          <span>The hardware firmware is built but hasn't been tested on real boards yet.</span></li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h2>Your data</h2>
+      <p class="muted" style="margin-top:0">Your photos, results, treatments, journal and settings are stored in this browser only. Nothing is uploaded.</p>
+      <button class="btn danger" id="wipeBtn">Delete all my data</button>
+      <div class="confirm" id="wipeConfirm" hidden>
+        <b id="wipeMsg">This permanently deletes everything DermEdge has stored on this device.</b>
+        <div class="controls">
+          <button class="btn danger solid" id="wipeYes">Yes, delete everything</button>
+          <button class="btn" id="wipeNo">Cancel</button>
+        </div>
+      </div>
     </div>
   </section>
 </main>
@@ -410,6 +472,10 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "history" || b.dataset.tab === "report") loadHistory();
   if (b.dataset.tab === "report") loadFairness();
   if (b.dataset.tab === "triggers") { loadState(); loadTreatments(); }
+  if (b.dataset.tab !== "about") $("wipeConfirm").hidden = true;
+});
+document.querySelectorAll("[data-goto]").forEach(a => a.onclick = e => {
+  e.preventDefault(); document.querySelector(`nav button[data-tab="${a.dataset.goto}"]`).click();
 });
 
 // camera
@@ -547,6 +613,20 @@ $("seedBtn").onclick = async () => {
   finally { $("seedBtn").disabled = false; $("seedBtn").textContent = "Load sample history"; }
 };
 $("clearBtn").onclick = async () => { await fetch("/api/demo/clear", { method: "POST" }); loadHistory(); };
+
+// delete all data: a second, explicit click confirms; then reload into first-run setup
+$("wipeBtn").onclick = async () => {
+  const h = await (await fetch("/api/history")).json(), t = (await (await fetch("/api/treatments")).json()).treatments;
+  $("wipeMsg").textContent = `This permanently deletes ${h.length} check${h.length === 1 ? "" : "s"}, ${t.length} treatment${t.length === 1 ? "" : "s"}, ` +
+    "your journal and your settings from this device. It can't be undone.";
+  $("wipeConfirm").hidden = false; $("wipeNo").focus();
+};
+$("wipeNo").onclick = () => { $("wipeConfirm").hidden = true; };
+$("wipeYes").onclick = async () => {
+  $("wipeYes").disabled = true; $("wipeYes").textContent = "Deleting…";
+  await json("/api/data/delete", {});
+  location.reload();
+};
 
 // history
 async function loadHistory() {
@@ -716,7 +796,7 @@ function obRender() {
       <p class="muted">A private place to check and track eczema with your camera and wearable.</p>
       <ul class="privacy"><li>Photos are analysed and stored on this device only. Nothing is uploaded.</li>
       <li>DermEdge is a screening aid, not a diagnosis. See a doctor for anything that worries you.</li>
-      <li>You can delete your history at any time by removing the app's data folder.</li></ul>
+      <li>You can delete all your data at any time from the About tab.</li></ul>
       <label class="toggle" style="color:var(--text)"><input type="checkbox" id="obConsent" ${obState.consent ? "checked" : ""}> I understand and want to continue</label>`;
     $("obConsent").onchange = e => { obState.consent = e.target.checked; $("obNext").disabled = !obState.consent; };
     $("obNext").disabled = !obState.consent; $("obNext").textContent = "Next";

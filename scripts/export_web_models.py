@@ -15,6 +15,7 @@ Then checks the ONNX model against PyTorch on the curated validation split.
 import ctypes
 import json
 import os
+import sys
 
 import numpy as np
 import torch
@@ -22,7 +23,10 @@ import torch.nn as nn
 from PIL import Image
 from torchvision import models, transforms
 
-ctypes.CDLL(os.path.join(os.path.dirname(torch.__file__), "lib", "libomp.dylib"), mode=ctypes.RTLD_GLOBAL)
+# macOS only (see app/wearable.py); other platforms' LightGBM brings its own OpenMP.
+_LIBOMP = os.path.join(os.path.dirname(torch.__file__), "lib", "libomp.dylib")
+if sys.platform == "darwin" and os.path.exists(_LIBOMP):
+    ctypes.CDLL(_LIBOMP, mode=ctypes.RTLD_GLOBAL)
 import lightgbm as lgb  # noqa: E402
 import pandas as pd  # noqa: E402
 

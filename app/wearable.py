@@ -19,6 +19,7 @@ Simulator scenarios replay WESAD subject S16 and Southampton patients S-08 (1.7%
 """
 import ctypes
 import os
+import sys
 import threading
 import time
 from collections import deque
@@ -26,10 +27,12 @@ from collections import deque
 import numpy as np
 import torch
 
-# LightGBM needs OpenMP; macOS without Homebrew has none, but PyTorch ships libomp.
-ctypes.CDLL(os.path.join(os.path.dirname(torch.__file__), "lib", "libomp.dylib"), mode=ctypes.RTLD_GLOBAL)
+# LightGBM needs OpenMP; macOS without Homebrew has none, but PyTorch ships libomp. Windows and
+# Linux LightGBM wheels bring their own, and PyTorch has no libomp.dylib there.
+_LIBOMP = os.path.join(os.path.dirname(torch.__file__), "lib", "libomp.dylib")
+if sys.platform == "darwin" and os.path.exists(_LIBOMP):
+    ctypes.CDLL(_LIBOMP, mode=ctypes.RTLD_GLOBAL)
 
-import sys  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent

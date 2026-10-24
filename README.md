@@ -67,7 +67,7 @@ python3 app/server.py
 ```
 Open http://localhost:8000 and allow camera access. The first start downloads the CLIP model (~600 MB) from Hugging Face once; after that everything runs offline.
 
-On macOS without Homebrew's `libomp`, LightGBM borrows PyTorch's copy (see `app/wearable.py`).
+On macOS without Homebrew's `libomp`, LightGBM borrows PyTorch's copy (see `app/wearable.py`); Windows and Linux need nothing extra.
 
 **Sample history:** put a few eczema photos in `app/sample_photos/`, then click *Load sample history* on the History tab. Every sample entry is labelled.
 

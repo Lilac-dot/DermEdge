@@ -6,8 +6,13 @@
 #include "esp_log.h"
 #include "esp_random.h"
 
-#ifdef CONFIG_DERMEDGE_GSR_GROVE
+#if defined(CONFIG_DERMEDGE_GSR_GROVE) || defined(CONFIG_DERMEDGE_TEMP_LM35)
+#define USE_ADC1
 #include "esp_adc/adc_oneshot.h"
+#endif
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #endif
 #ifdef CONFIG_DERMEDGE_MOISTURE_TOUCH
 #include "driver/touch_pad.h"
@@ -36,17 +41,39 @@ static float approach(float *level, float target, float dt)
     return *level;
 }
 
-#ifdef CONFIG_DERMEDGE_GSR_GROVE
+#ifdef USE_ADC1
 static adc_oneshot_unit_handle_t s_adc;
+#endif
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
+static adc_cali_handle_t s_temp_cali;
+#define LM35_READS 32  // averaged per 4 Hz sample
 #endif
 
 void signals_init(void)
 {
-#ifdef CONFIG_DERMEDGE_GSR_GROVE
+#ifdef USE_ADC1
     adc_oneshot_unit_init_cfg_t unit = {.unit_id = ADC_UNIT_1};
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit, &s_adc));
+#endif
+#ifdef CONFIG_DERMEDGE_GSR_GROVE
     adc_oneshot_chan_cfg_t ch = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_12};
     ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, CONFIG_DERMEDGE_GSR_ADC_CHANNEL, &ch));
+#endif
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
+    // LM35 gives 10 mV per degree C, so skin (~30-35 C) is ~300-350 mV: 0 dB attenuation
+    // (~100-950 mV) is the ESP32 ADC's most accurate range. Line fitting converts raw readings
+    // to millivolts, using the chip's eFuse Vref or 1100 mV if none was burnt.
+    adc_oneshot_chan_cfg_t tch = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_0};
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, CONFIG_DERMEDGE_TEMP_ADC_CHANNEL, &tch));
+    adc_cali_line_fitting_config_t cali = {.unit_id = ADC_UNIT_1, .atten = ADC_ATTEN_DB_0,
+                                           .bitwidth = ADC_BITWIDTH_12, .default_vref = 1100};
+    ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali, &s_temp_cali));
+    float c = signals_temp(0);
+    if (c < 20.0f || c > 42.0f) {
+        ESP_LOGW(TAG, "LM35 reads %.1f C -- check the wiring (+Vs on 5V, not 3V3) and the ADC channel", c);
+    } else {
+        ESP_LOGI(TAG, "LM35 reads %.1f C", c);
+    }
 #endif
 #ifdef CONFIG_DERMEDGE_MOISTURE_TOUCH
     ESP_ERROR_CHECK(touch_pad_init());
@@ -55,7 +82,9 @@ void signals_init(void)
     touch_pad_config(TOUCH_PAD_NUM0, 0);  // GPIO4: patch over the eczema-prone area
     touch_pad_config(TOUCH_PAD_NUM3, 0);  // GPIO15: reference patch on healthy skin
 #endif
-    ESP_LOGI(TAG, "GSR %s, moisture patch %s", signals_gsr_simulated() ? "simulated" : "Grove module",
+    ESP_LOGI(TAG, "GSR %s, skin temperature %s, moisture patch %s",
+             signals_gsr_simulated() ? "simulated" : "Grove module",
+             signals_temp_simulated() ? "simulated" : "LM35",
 #if defined(CONFIG_DERMEDGE_MOISTURE_TOUCH)
              "touch electrodes"
 #elif defined(CONFIG_DERMEDGE_MOISTURE_SIMULATED)
@@ -72,6 +101,15 @@ bool signals_stressed(void) { return s_stressed; }
 bool signals_gsr_simulated(void)
 {
 #ifdef CONFIG_DERMEDGE_GSR_GROVE
+    return false;
+#else
+    return true;
+#endif
+}
+
+bool signals_temp_simulated(void)
+{
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
     return false;
 #else
     return true;
@@ -111,10 +149,24 @@ float signals_eda(float t)
 
 float signals_temp(float t)
 {
-    // No skin-temperature sensor is wired yet, so this channel is always simulated.
-    static float level = TEMP_CALM;
     (void)t;
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
+    // One ESP32 ADC read is noisy by a few mV (several tenths of a degree), as much as the
+    // ~1 C calm/stress shift the model looks for, so average a burst of reads.
+    int sum = 0;
+    for (int i = 0; i < LM35_READS; i++) {
+        int raw = 0;
+        adc_oneshot_read(s_adc, CONFIG_DERMEDGE_TEMP_ADC_CHANNEL, &raw);
+        sum += raw;
+    }
+    int mv = 0;
+    adc_cali_raw_to_voltage(s_temp_cali, sum / LM35_READS, &mv);
+    return mv / 10.0f;  // 10 mV per degree C
+#else
+    // No skin-temperature sensor configured, so this channel is simulated.
+    static float level = TEMP_CALM;
     return approach(&level, s_stressed ? TEMP_STRESS : TEMP_CALM, 0.25f) + noise(0.02f);
+#endif
 }
 
 float signals_bvp(float t)

@@ -175,7 +175,8 @@ void app_main(void)
     if (signals_gsr_simulated()) {
         ESP_LOGW(TAG, "GSR is SIMULATED -- press BOOT to toggle calm/stressed");
     }
-    ESP_LOGW(TAG, "skin temperature, PPG and accelerometer are simulated until those sensors are wired");
+    ESP_LOGW(TAG, "%s are simulated until those sensors are wired",
+             signals_temp_simulated() ? "skin temperature, PPG and accelerometer" : "PPG and accelerometer");
 
     while (dermedge_wifi_connect(20000) != ESP_OK) {
         ESP_LOGW(TAG, "can't join \"%s\" yet, retrying", CONFIG_DERMEDGE_WIFI_SSID);

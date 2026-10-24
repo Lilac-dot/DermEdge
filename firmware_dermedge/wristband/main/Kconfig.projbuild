@@ -22,6 +22,27 @@ menu "DermEdge wristband"
         default 6
         range 0 7
 
+    choice DERMEDGE_TEMP_SOURCE
+        prompt "Skin temperature source"
+        default DERMEDGE_TEMP_SIMULATED
+        config DERMEDGE_TEMP_SIMULATED
+            bool "Simulated (follows the calm / stressed state)"
+        config DERMEDGE_TEMP_LM35
+            bool "LM35 on an ADC pin"
+            help
+                LM35 flat side facing you: left pin (+Vs) to 5V/VIN -- it needs at least 4 V, so
+                not 3V3 -- middle pin (Vout) to the ADC pin, right pin to GND. Skin reads ~300-350
+                mV, well inside the ESP32's input range even with the sensor on 5V.
+    endchoice
+
+    config DERMEDGE_TEMP_ADC_CHANNEL
+        int "LM35 ADC1 channel (7 = GPIO35)"
+        depends on DERMEDGE_TEMP_LM35
+        default 7
+        range 0 7
+        help
+            ADC1 only: ADC2 pins stop working while WiFi is on. Must differ from the GSR channel.
+
     choice DERMEDGE_MOISTURE_SOURCE
         prompt "Skin moisture patch source"
         default DERMEDGE_MOISTURE_SIMULATED

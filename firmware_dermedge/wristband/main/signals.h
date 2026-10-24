@@ -25,3 +25,4 @@ bool signals_moisture(float *patch, float *reference);
 
 // True when the value is synthetic, for the start-up log.
 bool signals_gsr_simulated(void);
+bool signals_temp_simulated(void);

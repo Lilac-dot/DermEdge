@@ -9,6 +9,8 @@ Two ESP-IDF projects that talk to the laptop hub (`app/server.py`) over local Wi
 
 `components/dermedge_net/` is shared: WiFi connection and the HTTP calls to the hub.
 
+Wristband sensors, wiring (including the LM35), datasets and test steps: `HARDWARE_GUIDE.md`.
+
 **Status:** both projects build with ESP-IDF v5.4.1 (wristband 866 KB, camera 1.4 MB).
 
 ## Build and flash with the VS Code ESP-IDF extension
@@ -44,5 +46,8 @@ press reset to run.
   The Grove conversion is approximate; check the module's no-skin reading (see `signals.c`).
 - **Moisture patch**: simulated (6% drier on the eczema patch), the ESP32's touch pins as crude
   capacitive electrodes (GPIO4 on the eczema-prone area, GPIO15 on healthy skin), or off.
-- Skin temperature, PPG and accelerometer are simulated until those sensors are wired.
+- **Skin temperature**: simulated, or an LM35 on ADC1 channel 7 (GPIO35). Wire it flat side
+  facing you: left pin to 5V/VIN (it needs at least 4 V, not 3V3), middle pin to GPIO35, right
+  pin to GND. The start-up log prints its first reading; wrist skin should be about 30-35 C.
+- PPG and accelerometer are simulated until those sensors are wired.
 - Start calm: the hub calibrates the stress model on the first 3 windows (90 s).

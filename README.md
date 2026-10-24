@@ -90,6 +90,7 @@ The training scripts in `scripts/` rebuild the product's models from the researc
 | `train_clip_severity.py` | severity head |
 | `train_esp32_rash_gate.py --data v1` | ESP32-CAM model and its C array |
 | `healthy_gate_probe.py`, `download_scin_healthy.py`, `prepare_megpaulson_healthy.py` | healthy-skin data and the probe that checked it for shortcuts |
+| `wesad_wrist_summary.py`, `southampton_moisture_summary.py` | readable tables and calm-vs-stress / eczema-vs-healthy checks of the wearable datasets (see `docs/SENSOR_DATA.md`) |
 
 ## Data
 - **SCIN** (Google, open access): real smartphone photos, healthy and diseased; used for the rash screen and its fairness check.
@@ -97,6 +98,8 @@ The training scripts in `scripts/` rebuild the product's models from the researc
 - **WESAD** (Schmidt et al., 2018): wrist sensor recordings for the stress model.
 - **Southampton e-textile AD sensor data** (Todorov 2026, CC-BY, DOI 10.5258/SOTON/D3873): moisture readings on eczema vs healthy skin.
 - **MegPaulson/Healthy_Skin** (Hugging Face): extra healthy-skin close-ups, filtered.
+
+What the wearable datasets show, where to download them, and next steps for the wearable models: `docs/SENSOR_DATA.md`.
 
 ## Limitations
 DermEdge is a screening aid, not a diagnosis. The on-device models and the darker-skin calibration would benefit from more real-world photos, and the firmware is ready to flash but hasn't been tested on boards yet.

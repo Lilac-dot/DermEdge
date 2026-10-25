@@ -11,6 +11,7 @@ Newest first. Each decision is reflected in the sections below.
 
 | Date | Decision | Why |
 |---|---|---|
+| 26 Oct 2026 | **The pitch deck is rebuilt around this plan** ([PITCH_DECK.md](PITCH_DECK.md)): phone or laptop camera, the DermEdge band, a future-scope slide. It quotes the band's GSR stress model (90% accuracy, 73% of stress caught), not the four-signal LightGBM's AUC 0.92-0.94. | The old deck still showed the ESP32-CAM and the Wi-Fi wristband. The LightGBM called 50% of WESAD's meditation and amusement windows stress, so its AUC overstates it (`scripts/train_gsr_stress.py`). |
 | 25 Oct 2026 | **The website moves from pink to a teal theme** (accent `#0F7C74`), light on every device (it no longer follows the device's dark mode); pink and red are kept for alerts. The band's screen palette follows (Tishya). Tokens in `web/index.html`, listed in [DERMEDGE_APP_GUIDE.md](DERMEDGE_APP_GUIDE.md#design). | The skin photos are pink, so a pink interface hid them and made buttons look like alerts. Teal reads as clinical, contrasts with red rashes, and avoids a "skin-coloured" theme that implies light skin. |
 | 25 Oct 2026 | **The scratch model uses motion features only, for now.** The band still samples at 800 Hz and computes the vibration features, for a better sensor later. | On the first recordings, the ADXL345's noise at 800 Hz (14-22 mg) buried the skin vibration: vibration features alone scored at chance on the held-out round and made the combined model worse. Motion alone found every scratch clip with no false episodes. |
 | 25 Oct 2026 | **ESP32-CAM moves to future scope.** Photos for the finale come from the phone or laptop camera in the website and hub. The firmware and its 300 KB model stay in the repo. | Time before the finale goes to the band. |
@@ -29,9 +30,12 @@ stays near zero without eczema in the photo. The Wearable tab shows trigger aler
 
 ![Wearable triggers and flare risk](architecture/4_wearable_flare_risk.png)
 
-Since these diagrams were drawn, **night scratching is real**: the DermEdge band's scratch
-episodes feed the trigger "scratching (DermEdge band)" (full strength at 30 episodes in 8 hours,
-the same scale as the simulated one). Stress, moisture and the journal work as drawn.
+Both diagrams were redrawn on 26 Oct 2026 for the current plan (`scripts/draw_architecture.py`):
+the band's scratch detector and GSR stress model, skin temperature as a planned stress input, and
+the ESP32-CAM as future scope. Scratch episodes feed the trigger "scratching (DermEdge band)", at
+full strength at 30 episodes in 8 hours.
+
+![The DermEdge band: scratch detection](architecture/6_band_scratch.png)
 
 The other diagrams: [stage 1](architecture/1_stage1_clip_rash.png),
 [stage 2](architecture/2_stage2_resnet_gradcam.png), [stage 3](architecture/3_stage3_severity.png),

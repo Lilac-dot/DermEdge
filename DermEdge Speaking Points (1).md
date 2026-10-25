@@ -32,7 +32,7 @@ DermEdge runs a three-stage skin pipeline on your own device, and fuses it with 
 
 - **Three stages:** normal vs rash (CLIP ViT-B/16 with a fine-tuned head), eczema vs 7 look-alikes (ResNet18), then severity on a 0–12 EASI-signs scale.
 - **Edge AI:** a laptop hub running the full pipeline offline after a one-time model download, and a static browser version using WebGPU and ONNX Runtime Web, so nothing is uploaded. Future scope: a 300 KB INT8 MobileNet on an ESP32-CAM, already trained.
-- **Sensor fusion:** the DermEdge band detects scratching from its accelerometer; GSR and a skin-temperature thermistor feed a LightGBM stress model, calibrated per wearer against their own calm baseline; a moisture patch flags dry skin. These combine with the image result into a daily flare-risk score.
+- **Sensor fusion:** the DermEdge band detects scratching from its accelerometer; GSR feeds a stress model calibrated per wearer against their own calm baseline, with a skin-temperature thermistor as a planned second input; a moisture patch flags dry skin. These combine with the image result into a daily flare-risk score.
 - **Trust features:** a Grad-CAM heatmap, a photo-quality check that asks for a retake, and a "not sure, see a dermatologist" fallback when the models disagree.
 - **Parity check:** the browser model gives the same stage-1 decision as the Python model on 98.5% of 200 held-out photos.
 
@@ -45,7 +45,7 @@ The strongest part of the validation is its design: case-grouped cross-validatio
 | Stage 1: normal vs rash | AUC 0.93; caught 1182 of 1444 rashes, cleared 84 of 90 healthy photos | SCIN phone photos, 5-fold CV grouped by case |
 | Stage 2: eczema vs look-alikes | 81.1% accuracy, 82.5% recall | Curated test split, 507 images |
 | Stage 3: severity | Mean error 1.2 points on 0–12; band within one step 97.6% | Held-out validation set |
-| Stress | AUC 0.92–0.94 | WESAD, leave-one-person-out |
+| Stress (band GSR) | 90% accuracy; 73% of stress caught | WESAD, leave-one-person-out, 15 people |
 
 - **Skin-tone fairness:** at one shared threshold the rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI. A skin-type calibration brings V–VI to 83%.
 - **Leakage check:** a probe checks for source shortcuts, because an earlier "Normal" class could be recognized by its source rather than by the skin.
@@ -84,7 +84,7 @@ Six questions are likely, and each has an honest answer.
 | Likely question | Honest answer |
 | --- | --- |
 | "97.1% on the ESP32 model seems high." | It's future scope, not part of the demo. That test split is the original Eczema-vs-Normal set, and the repo notes the old "Normal" class had source shortcuts. Present it as proof the model fits on a 300 KB chip, and cite the SCIN result (AUC 0.93) as the real clinical number. |
-| "Why measure skin temperature? Isn't it too variable?" | Yes, as an eczema marker, and that's what the dermatologists we consulted told us. So we use it only inside the stress model, where it drops under stress in 12 of 15 WESAD participants. It's measured as a change from the wearer's own calm baseline. |
+| "Why measure skin temperature? Isn't it too variable?" | Yes, as an eczema marker, and that's what the dermatologists we consulted told us. So it is only a stress-model input, being added to the band: it drops under stress in 12 of 15 WESAD participants. It's measured as a change from the wearer's own calm baseline. |
 | "Where does your data come from? Is it synthetic?" | Real public datasets for every model (SCIN, WESAD, Southampton). We augment them with our own sensors' measured noise, which the organisers allow, test only on real held-out people, and check the band on one volunteer with eczema (an N = 1 feasibility pilot). |
 | "How good is the severity score?" | The exact band is right 51.6% of the time, against 39% by chance, with Spearman 0.65. Call it a trend tracker; the within-one-band figure (97.6%) is the one that matters. |
 | "Is the flare-risk score validated?" | The stress model is validated on WESAD, but WESAD is stress data, not eczema flares. No clinical validation of the combined flare score is in the repo, so call it a prototype hypothesis that needs a patient study. |

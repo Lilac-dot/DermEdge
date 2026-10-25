@@ -66,8 +66,10 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
   than the band (offline recording), send `ts = now - (status.el - t)` instead of `t`.
 - The band buffers about **an hour** of readings while disconnected and sends them when the link
   comes back (status `"s":"syncing"`, `q` counting down).
-- Future fields the hub already accepts: `temperatures` (`lesion_c`, `reference_c`), `gsr`
-  (`microsiemens`), `moisture` (`patch`, `reference`), as the sensors are added.
+- Future fields the hub already accepts: `gsr` (`microsiemens`) and `moisture` (`patch`,
+  `reference`), as the sensors are added. `temperatures` (`lesion_c`, `reference_c`) is still
+  accepted but was built for the lesion-vs-healthy pair, now future scope; it changes to one skin
+  temperature alongside GSR (see below).
 
 ### 5. Flare alerts
 - A readings upload can return `"alert": {id, level, risk, reasons, tips}`; the hub raises at most

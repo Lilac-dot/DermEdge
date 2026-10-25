@@ -12,5 +12,8 @@ for sdk in "" /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk /Library/Dev
         fi
     fi
 done
-cc $SYSROOT -std=c11 -Wall -Wextra -Werror -O1 -o /tmp/dermedge_band_test test_host.c ../main/scratch.c ../main/touch.c ../main/app_sm.c -lm
+# The synthetic tests check the detector's logic with the hand-set rule; the trained model is
+# checked on real recordings by tools/tune.py. Build the trained version too, so it always compiles.
+cc $SYSROOT -std=c11 -Wall -Wextra -Werror -O2 -DSCRATCH_FORCE_RULE -o /tmp/dermedge_band_test test_host.c ../main/scratch.c ../main/touch.c ../main/app_sm.c -lm
+cc $SYSROOT -std=c11 -Wall -Wextra -Werror -O2 -c -o /tmp/dermedge_scratch_model.o ../main/scratch.c
 /tmp/dermedge_band_test

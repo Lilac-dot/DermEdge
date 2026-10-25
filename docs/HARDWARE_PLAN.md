@@ -11,6 +11,7 @@ Newest first. Each decision is reflected in the sections below.
 
 | Date | Decision | Why |
 |---|---|---|
+| 25 Oct 2026 | **The scratch model uses motion features only, for now.** The band still samples at 800 Hz and computes the vibration features, for a better sensor later. | On the first recordings, the ADXL345's noise at 800 Hz (14-22 mg) buried the skin vibration: vibration features alone scored at chance on the held-out round and made the combined model worse. Motion alone found every scratch clip with no false episodes. |
 | 25 Oct 2026 | **ESP32-CAM moves to future scope.** Photos for the finale come from the phone or laptop camera in the website and hub. The firmware and its 300 KB model stay in the repo. | Time before the finale goes to the band. |
 | 25 Oct 2026 | **Skin temperature is a stress-model input only: one thermistor, not a lesion-vs-healthy pair.** The pair moves to future scope. | Most dermatologists we spoke to said skin temperature is too variable to be an eczema marker; one said lesions run warmer. In WESAD it drops under stress in 12 of 15 people, and the stress model uses it heavily (about 31% of its splits). |
 | 25 Oct 2026 | **NTC thermistor, not LM35.** | Runs on 3V3 (the LM35 needs 5V), and moves ~33 mV/°C at skin temperature against the LM35's 10. The conversion code is in `archive/gsr_wristband_wifi/main/signals.c`. |
@@ -126,24 +127,36 @@ patients of the Southampton e-textile study the website's simulator replays.
 
 ## 6. Scratch detection
 
-**Now:** the ADXL345 samples at 800 Hz. Every second the detector scores the last 2 s of motion
-and 1 s of vibration:
-- motion rhythm: 2.5-8 strokes a second
-- vibration: band powers 2-400 Hz, and whether the 80-400 Hz vibration pulses in the stroke rhythm
+**How it works:** the ADXL345 samples at 800 Hz. Every second the detector turns the last 2 s
+of motion and 1 s of vibration into features (motion strength and rhythm at 2.5-8 strokes a
+second, band powers from 2 to 400 Hz, and whether the 80-400 Hz vibration pulses in the stroke
+rhythm), and a small logistic model trained on recordings scores them. Two scratchy seconds
+start an episode; four calm ones end it.
 
-This follows the ADAM sensor study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021). Scratching makes
-a skin vibration that a 100 Hz smartwatch can't see, which is why one mistook waving for
-scratching and missed finger-only scratching. So vibration separates them: waving has rhythm but
-no vibration; finger-only scratching has vibration but little motion.
+The vibration features follow the ADAM sensor study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021):
+scratching makes a skin vibration that a 100 Hz smartwatch can't see, which is why one mistook
+waving for scratching and missed finger-only scratching.
 
-**In progress:** training it on labelled recordings. On a still band, the ADXL345's noise at 800
-Hz is 14-22 mg RMS, flat across frequencies, well above the hand-set rule's first guess, so the
-vibration threshold has to come from real data:
-1. `tools/record.py session` records 8 activities twice (nails, fingertips, waving, typing,
-   phone, rubbing, marching, rest). Clips stay in `~/DermEdge-recordings`, never in git.
-2. `tools/tune.py` trains a small logistic model, tests it on the round it didn't see, and
-   writes `main/scratch_model.h` for the band.
-3. Report per-activity results, especially false alarms on waving, typing and rubbing.
+**First results (25 Oct 2026, one wearer, board on the back of the hand):** 16 clips of 20 s,
+8 activities recorded twice with `tools/record.py session`; trained on one round, tested on the
+other with `tools/tune.py`.
+
+| | Scratch clips found | False episodes in the 12 other clips | Waving |
+|---|---|---|---|
+| Hand-set rule (before training) | 3 of 4 | 3 (waving twice, typing once) | flagged every second |
+| Vibration features only | | | chance level (balanced accuracy 0.51) |
+| **Motion features (on the band now)** | **4 of 4, one episode each** | **0** | **0%** |
+
+- Vibration didn't help on this hardware: at 800 Hz the ADXL345's noise floor (14-22 mg RMS,
+  flat across frequencies) hides it, and the vibration envelope never pulsed in the stroke rhythm
+  (autocorrelation at most 0.30). ADAM used a low-noise sensor pressed to the skin.
+- What separates scratching here is the motion pattern: where its energy sits (2-5 vs 5-20 Hz),
+  its strength, and its rhythm. It partly learned that this wearer waves bigger than they
+  scratch, so gentle waving may still fool it.
+- The band's C code and the Python model agree on all 284 windows (largest probability
+  difference 0.00006).
+- The threshold (0.7) and episode ending (4 calm seconds) were picked on the same held-out round
+  they were scored on, so these numbers are optimistic.
 
 **Limits to keep in mind:** one wearer's recordings make a personal model, not a validated one.
 ADAM tested on held-out people for that reason. Night-time is the easy case, with few lookalike

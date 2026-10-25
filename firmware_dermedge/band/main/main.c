@@ -1,8 +1,10 @@
 // DermEdge band on a plain ESP32: ADXL345 scratch detection, a touch pad, the ST7735 screen and
 // a Bluetooth link to the website, run by the state machine in app_sm.c.
 //
-// One loop every 20 ms reads the touch pad, handles Bluetooth messages, drains the
-// accelerometer FIFO every 100 ms, sends queued readings and redraws. The website relays the
+// A sensor task drains the accelerometer's FIFO every 10 ms (it holds 40 ms at 800 Hz) and a
+// detector task scores each second of it; one loop every 20 ms reads the touch pad, handles
+// Bluetooth messages and the detector's results, sends queued readings and redraws. Typing
+// "raw on" on the USB serial line streams the raw 800 Hz samples for tools/record.py. The website relays the
 // readings to the laptop hub (app/band.py); recordings made offline wait in the outbox (about
 // an hour of them) and go out when the laptop reconnects.
 #include <stdio.h>
@@ -14,10 +16,13 @@
 #include "ble.h"
 #include "display.h"
 #include "driver/gpio.h"
+#include "driver/uart.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/stream_buffer.h"
 #include "freertos/task.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -29,7 +34,8 @@ static const char *TAG = "band";
 
 #define PIN_TOUCH 27  // the add-on board's touch pad output, high while touched
 #define LOOP_MS 20
-#define SENSOR_MS 100
+#define SENSOR_TASK_MS 10  // the FIFO holds 40 ms at 800 Hz
+#define SAMPLE_BUFFER (ADXL_HZ * 6 * 2)  // 2 s of raw samples between the sensor and the detector
 #define STATUS_MS 1000
 #define FRAME_MS 250      // redraw rate for animated screens
 #define SENSOR_RETRY_MS 2000
@@ -97,10 +103,8 @@ static void ob_send(void) {
 // --- state -------------------------------------------------------------------------------
 static sm_t sm;
 static ui_model_t ui = {.sm = &sm};
-static scratch_t det;
 static touch_t pad;
-static bool sensor_ok;
-static uint32_t rec_start_ms;
+static uint32_t rec_start_ms, flush_rec;
 static char label[24] = "day";
 
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
@@ -140,6 +144,106 @@ static void parse_alert(char *s) {
     strlcpy(ui.alert_tip, f[2], sizeof(ui.alert_tip));
 }
 
+// --- sensing: one task drains the ADXL345, another runs the detector ----------------------
+enum { OUT_MOTION = 1, OUT_FLUSHED };
+typedef struct {
+    uint8_t kind;
+    bool has_event;
+    scratch_motion_t m;
+    scratch_event_t e;
+} det_out_t;
+enum { DET_RESET = 1, DET_FLUSH = 2 };
+static StreamBufferHandle_t samples;
+static QueueHandle_t det_cmds, det_out;
+static volatile bool sensor_ok, raw_mode;
+static volatile uint32_t fifo_overruns, buffer_drops;
+
+// raw frame for tools/record.py: A5 5A, count, overrun flag, sample number (LE), count x (x, y, z) int16 LE
+static void raw_frame(const int16_t xyz[][3], int n, bool overrun, uint16_t seq) {
+    uint8_t hdr[6] = {0xA5, 0x5A, (uint8_t)n, overrun, (uint8_t)(seq & 0xFF), (uint8_t)(seq >> 8)};
+    uart_write_bytes(UART_NUM_0, hdr, sizeof(hdr));
+    uart_write_bytes(UART_NUM_0, xyz, n * sizeof(xyz[0]));
+}
+
+static void sensor_task(void *arg) {
+    static int16_t xyz[ADXL_MAX_BATCH][3];
+    uint16_t seq = 0;
+    uint32_t idle = 0;
+    TickType_t wake = xTaskGetTickCount();
+    for (;;) {
+        vTaskDelayUntil(&wake, pdMS_TO_TICKS(SENSOR_TASK_MS));
+        if (!sensor_ok) {
+            if (++idle % (SENSOR_RETRY_MS / SENSOR_TASK_MS) == 0 && adxl_init() == ESP_OK) sensor_ok = true;
+            continue;
+        }
+        bool overrun;
+        int n = adxl_read(xyz, ADXL_MAX_BATCH, &overrun);
+        if (n < 0) {
+            sensor_ok = false;
+            continue;
+        }
+        if (overrun) fifo_overruns++;
+        if (!n) continue;
+        if (raw_mode) raw_frame(xyz, n, overrun, seq);
+        seq += n;
+        size_t bytes = n * sizeof(xyz[0]);
+        // whole batches only, so the detector never sees half a sample
+        if (xStreamBufferSpacesAvailable(samples) >= bytes) xStreamBufferSend(samples, xyz, bytes, 0);
+        else buffer_drops++;
+    }
+}
+
+static void detect_task(void *arg) {
+    static scratch_t det;
+    static int16_t chunk[64][3];
+    scratch_reset(&det);
+    for (;;) {
+        uint8_t cmd;
+        while (xQueueReceive(det_cmds, &cmd, 0)) {
+            if (cmd == DET_FLUSH) {
+                det_out_t o = {.kind = OUT_FLUSHED};
+                o.has_event = scratch_flush(&det, &o.e);
+                xQueueSend(det_out, &o, portMAX_DELAY);
+            }
+            if (cmd == DET_RESET) scratch_reset(&det);
+        }
+        size_t got = xStreamBufferReceive(samples, chunk, sizeof(chunk), pdMS_TO_TICKS(50));
+        for (size_t i = 0; i < got / sizeof(chunk[0]); i++) {
+            det_out_t o = {.kind = OUT_MOTION};
+            int f = scratch_feed(&det, chunk[i][0] / ADXL_LSB_PER_G, chunk[i][1] / ADXL_LSB_PER_G,
+                                 chunk[i][2] / ADXL_LSB_PER_G, &o.m, &o.e);
+            if (f & SCRATCH_GOT_MOTION) {
+                o.has_event = f & SCRATCH_GOT_EVENT;
+                xQueueSend(det_out, &o, 0);  // the UI loop drains it every 20 ms; a full queue just skips a second
+            }
+        }
+    }
+}
+
+// "raw on" / "raw off" from the USB serial line
+static void serial_commands(void) {
+    static char line[32];
+    static int len;
+    uint8_t c;
+    while (uart_read_bytes(UART_NUM_0, &c, 1, 0) == 1) {
+        if (c != '\n' && c != '\r') {
+            if (len < (int)sizeof(line) - 1) line[len++] = c;
+            continue;
+        }
+        line[len] = 0;
+        len = 0;
+        if (!strcmp(line, "raw on")) {
+            esp_log_level_set("*", ESP_LOG_NONE);  // nothing but frames on the line
+            raw_mode = true;
+        } else if (!strcmp(line, "raw off")) {
+            raw_mode = false;
+            esp_log_level_set("*", ESP_LOG_INFO);
+            ESP_LOGI(TAG, "raw off; FIFO overruns %lu, buffer drops %lu", (unsigned long)fifo_overruns,
+                     (unsigned long)buffer_drops);
+        }
+    }
+}
+
 static int apply(int fx);
 
 static int handle(sm_event_t ev, uint32_t arg) {
@@ -169,18 +273,17 @@ static int command(char *c) {
 // Carries out the state machine's effects; returns whether to redraw
 static int apply(int fx) {
     if (fx & FX_START_REC) {
-        scratch_reset(&det);
+        uint8_t c = DET_RESET;
+        xQueueSend(det_cmds, &c, portMAX_DELAY);
         rec_start_ms = now_ms();
         ui.scratches = 0;
         ui.elapsed_s = 0;
         if (sm.source == SRC_TOUCH) strlcpy(label, "day", sizeof(label));
     }
     if (fx & FX_STOP_REC) {
-        scratch_event_t e;
-        if (scratch_flush(&det, &e)) {
-            ob_push((item_t){(uint16_t)sm.recording, ITEM_SCRATCH, e.t, e.duration_s, e.intensity});
-            ui.scratches++;
-        }
+        uint8_t c = DET_FLUSH;  // an episode still open comes back as OUT_FLUSHED, for this recording
+        flush_rec = sm.recording;
+        xQueueSend(det_cmds, &c, portMAX_DELAY);
         ui.has_last = true;
         ui.last_minutes = ui.elapsed_s / 60;
         ui.last_scratches = ui.scratches;
@@ -192,30 +295,26 @@ static int apply(int fx) {
     return fx & FX_REDRAW;
 }
 
-static void read_sensor(void) {
-    static float xyz[ADXL_MAX_BATCH][3];
-    int n = adxl_read(xyz, ADXL_MAX_BATCH);
-    if (n < 0) {
-        ESP_LOGW(TAG, "accelerometer stopped answering");
-        sensor_ok = false;
-        handle(EV_SENSOR_FAIL, 0);
-        return;
-    }
-    bool recording = sm.state == ST_RECORDING;
-    for (int i = 0; i < n; i++) {
-        scratch_motion_t m;
-        scratch_event_t e;
-        int got = scratch_feed(&det, xyz[i][0], xyz[i][1], xyz[i][2], &m, &e);
-        if (got & SCRATCH_GOT_MOTION) {
-            ui.activity = m.activity;
-            ui.freq_hz = m.freq_hz;
-            ui.scratchy = m.scratchy;
-            if (recording) ob_push((item_t){(uint16_t)sm.recording, ITEM_MOTION, m.t, m.activity, m.scratch_energy});
-        }
-        if (got & SCRATCH_GOT_EVENT && recording) {
-            ob_push((item_t){(uint16_t)sm.recording, ITEM_SCRATCH, e.t, e.duration_s, e.intensity});
-            ui.scratches++;
-            ESP_LOGI(TAG, "scratch episode: %.1f s at %.1f s, intensity %.2f g", e.duration_s, e.t, e.intensity);
+static void scratch_found(uint32_t rec, const scratch_event_t *e) {
+    ob_push((item_t){(uint16_t)rec, ITEM_SCRATCH, e->t, e->duration_s, e->intensity});
+    ui.scratches++;
+    ESP_LOGI(TAG, "scratch episode: %.1f s at %.1f s, vibration %.3f g", e->duration_s, e->t, e->intensity);
+}
+
+// The detector's results: a summary each second, episodes as they end
+static void detector_results(void) {
+    det_out_t o;
+    while (xQueueReceive(det_out, &o, 0)) {
+        bool recording = sm.state == ST_RECORDING;
+        if (o.kind == OUT_MOTION) {
+            ui.activity = o.m.activity;
+            ui.freq_hz = o.m.freq_hz;
+            ui.scratchy = o.m.scratchy;
+            if (recording) ob_push((item_t){(uint16_t)sm.recording, ITEM_MOTION, o.m.t, o.m.activity, o.m.scratch_energy});
+            if (o.has_event && recording) scratch_found(sm.recording, &o.e);
+        } else if (o.kind == OUT_FLUSHED && o.has_event) {
+            scratch_found(flush_rec, &o.e);  // an episode cut short by stopping
+            ui.last_scratches = ui.scratches;
         }
     }
 }
@@ -235,16 +334,24 @@ void app_main(void) {
     ob_alloc();
     sm_init(&sm);
     pad_init(&pad);
-    scratch_reset(&det);
     disp_init();
     ui_render(&ui);  // boot screen
 
     inbox = xQueueCreate(8, sizeof(msg_t));
     ble_start(on_ble);
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 256, 4096, 0, NULL, 0));  // "raw on" in, raw frames out
+    samples = xStreamBufferCreate(SAMPLE_BUFFER, 1);
+    det_cmds = xQueueCreate(4, sizeof(uint8_t));
+    det_out = xQueueCreate(8, sizeof(det_out_t));
     sensor_ok = adxl_init() == ESP_OK;
+    bool sensor_was_ok = sensor_ok;
     handle(sensor_ok ? EV_SENSOR_OK : EV_SENSOR_FAIL, 0);
+    // the sensor first, on the core NimBLE doesn't use, so nothing delays the FIFO
+    xTaskCreatePinnedToCore(sensor_task, "sensor", 4096, NULL, 10, NULL, 1);
+    xTaskCreatePinnedToCore(detect_task, "detect", 6144, NULL, 5, NULL, 1);
+    ESP_LOGI(TAG, "free heap %lu bytes", (unsigned long)esp_get_free_heap_size());
 
-    uint32_t last_sensor = 0, last_status = 0, last_frame = 0, last_retry = now_ms();
+    uint32_t last_status = 0, last_frame = 0;
     bool dirty = true;
     while (1) {
         uint32_t now = now_ms();
@@ -270,16 +377,13 @@ void app_main(void) {
             }
         }
 
-        if (sensor_ok && now - last_sensor >= SENSOR_MS) {
-            last_sensor = now;
-            read_sensor();
-        } else if (!sensor_ok && now - last_retry >= SENSOR_RETRY_MS) {
-            last_retry = now;
-            if (adxl_init() == ESP_OK) {
-                sensor_ok = true;
-                dirty |= handle(EV_SENSOR_OK, 0);
-            }
+        serial_commands();
+        if (sensor_ok != sensor_was_ok) {  // the sensor task lost or found the accelerometer
+            sensor_was_ok = sensor_ok;
+            if (!sensor_ok) ESP_LOGW(TAG, "accelerometer stopped answering");
+            dirty |= handle(sensor_ok ? EV_SENSOR_OK : EV_SENSOR_FAIL, 0);
         }
+        detector_results();
         if (sm.state == ST_RECORDING) ui.elapsed_s = (now - rec_start_ms) / 1000.0f;
 
         ob_send();

@@ -10,6 +10,7 @@ which relays readings to the laptop hub (`app/band.py`).
 sh test/run.sh        # host tests: scratch detector, touch gestures, state machine
 sh test/preview.sh    # renders every screen with the real ui.c to test/preview.png
 python3 tools/make_fonts.py   # regenerates main/fonts.c from the website's fonts
+python3 tools/record.py check # is the accelerometer streaming 800 Hz cleanly?
 ```
 
 ![Every screen, rendered on the Mac by test/preview.sh](test/preview.png)
@@ -42,18 +43,29 @@ white. The panel wants RGB order (`MADCTL 0xA0`); with the BGR bit set, pink sho
 
 ## Scratch detection
 
-Every second, the last 2 s of motion (gravity removed) counts as scratchy when it is strong
-enough (0.04-1.5 g RMS) and rhythmic at 2.5-8 strokes a second (autocorrelation peak of the most
-active axis). Two scratchy seconds start an episode and two calm ones end it. The thresholds in
-`main/scratch.h` are first guesses from synthetic motion and still need tuning on real
-recordings (the hub's opt-in raw clips are for that).
+Wear the add-on board on the **back of the hand** you scratch with. The ADXL345 samples at
+800 Hz; a sensor task drains its FIFO every 10 ms and a detector task (`main/scratch.c`) turns
+each second into features: motion strength and rhythm (2.5-8 strokes a second, at 100 Hz after
+decimation), band powers from 2 to 400 Hz, and whether the 80-400 Hz vibration pulses in the
+stroke rhythm. A logistic model in `main/scratch_model.h` scores them (threshold 0.7); two
+scratchy seconds start an episode and four calm ones end it.
 
-Known limit: this is motion only. The ADAM sensor study (Chun et al., "A skin-conformable wireless sensor to objectively quantify symptoms of pruritus", *Sci. Adv.* 7, eabf9405, 2021)
-found the most telling
-scratch signal is a 100-800 Hz skin vibration, which 100 Hz sampling can't see: a 100 Hz
-smartwatch took hand-waving for scratching and missed finger-only scratching. The ADXL345 runs at
-up to 3200 Hz, so the next step is a vibration-band check alongside the rhythm test, with the
-sensor on the back of the hand as in that study.
+Training it on your own recordings:
+
+```
+python3 tools/record.py check      # 10 s still: sample rate, dropouts, noise floor
+python3 tools/record.py session    # 8 activities x 20 s, twice, into ~/DermEdge-recordings (not git)
+python3 tools/tune.py              # held-out results: rule vs motion vs vibration vs all features
+python3 tools/tune.py --write      # train on everything, write main/scratch_model.h, then rebuild
+```
+
+`tools/replay.c` runs the band's own detector over a recording, so training uses exactly the
+band's features. The first model (one wearer, 16 clips) found every scratch clip with no false
+episodes on the held-out round, using motion features only: the ADXL345's noise at 800 Hz
+(14-22 mg) buries the skin vibration the ADAM study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021)
+relies on. Results and limits: `docs/HARDWARE_PLAN.md` section 6. The host tests check the
+detector's logic with the hand-set rule (`-DSCRATCH_FORCE_RULE`), including that waving is
+rejected and fingertip-only scratching caught.
 
 ## Bluetooth protocol
 

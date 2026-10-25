@@ -551,6 +551,29 @@
       </ul>
     </div>
 
+    <div class="card" style="margin-top:20px" id="privacy">
+      <h2>Privacy</h2>
+      <p class="muted" style="margin-top:0">Updated 26 October 2026. DermEdge has no accounts, no ads and no analytics.</p>
+      <ul class="privacy">
+        <li>Your health data stays on this device.
+          <span>Photos, results, treatments, journal, skin type and band recordings are kept in this browser's own storage. They are never uploaded.</span></li>
+        <li>The camera runs only when you ask.
+          <span>It turns on when you start it, and its frames are analysed on this device.</span></li>
+        <li>The band connects only after you pair it.
+          <span>Encrypted Bluetooth, unlocked with the 6-digit code on the band's screen. Readings go from the band to this browser and nowhere else.</span></li>
+        <li>What does use the internet.
+          <span>Vercel hosts this site and the AI engine (ONNX Runtime) loads from the jsDelivr CDN. Like any website, they see your IP address and browser
+            when you visit. The AI models download from this site once and are kept for offline use. None of these requests carry your photos or health data.</span></li>
+        <li>Data leaves only if you share it.
+          <span>The doctor report and recording CSVs are made on this device, and go wherever you print, save or send them.</span></li>
+        <li>You're in control.
+          <span>Delete everything below at any time; clearing this site's data in your browser does the same. The cached models stay, as they hold nothing about you.</span></li>
+        <li>This is a prototype.
+          <span>DermEdge is a hackathon prototype, not a medical device. A public release would need a full privacy policy under India's Digital Personal Data
+            Protection Act 2023, with a named grievance contact. Questions: <a href="https://github.com/Lilac-dot/DermEdge/issues" target="_blank" rel="noopener">GitHub issues</a>.</span></li>
+      </ul>
+    </div>
+
     <div class="card" style="margin-top:20px">
       <h2>Your data</h2>
       <p class="muted" style="margin-top:0">Your photos, results, treatments, journal and settings are stored in this browser only. Nothing is uploaded.</p>
@@ -1152,7 +1175,7 @@ function obRender() {
       <p class="muted">A private place to check and track eczema with your camera and wearable.</p>
       <ul class="privacy"><li>Photos are analysed and stored on this device only. Nothing is uploaded.</li>
       <li>DermEdge is a screening aid, not a diagnosis. See a doctor for anything that worries you.</li>
-      <li>You can delete all your data at any time from the About tab.</li></ul>
+      <li>You can delete all your data at any time from the About tab, which also has the full privacy details.</li></ul>
       <label class="toggle" style="color:var(--text)"><input type="checkbox" id="obConsent" ${obState.consent ? "checked" : ""}> I understand and want to continue</label>`;
     $("obConsent").onchange = e => { obState.consent = e.target.checked; $("obNext").disabled = !obState.consent; };
     $("obNext").disabled = !obState.consent; $("obNext").textContent = "Next";

@@ -56,7 +56,7 @@ The strongest part of the validation is its design: case-grouped cross-validatio
 DermEdge keeps cost and risk low for patients by running on their own hardware and keeping photos on the device.
 
 - **Access:** the full dashboard runs on a laptop or in a browser with any phone or laptop camera, and the band is built from low-cost ESP32 parts. A 300 KB model for a low-cost ESP32-CAM is future scope.
-- **Privacy and offline use:** after a one-time model download, everything runs without a connection. This suits clinics with weak connectivity and patients wary of uploading skin photos.
+- **Privacy and offline use:** after a one-time model download, everything runs without a connection. This suits clinics with weak connectivity and patients wary of uploading skin photos. The About tab has a plain-language privacy section that names exactly what does touch the internet (the host and the AI engine's CDN, never photos or health data) and notes that a public release would need a full policy under India's DPDP Act 2023.
 - **Equity:** skin-tone calibration addresses the known under-representation of darker skin in dermatology AI.
 - **Sustainability:** it is built on open or CC-BY datasets (SCIN, WESAD, Southampton), the code is open, and the browser version is deployed on Vercel. Inference runs on the user's device, so there is no recurring cloud inference cost.
 - **Long-term value:** treatment logs and trigger insights (which of your triggers line up with worse check-ins) help patients and doctors manage a chronic condition.

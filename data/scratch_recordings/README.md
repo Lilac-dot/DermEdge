@@ -8,7 +8,7 @@ detector (`firmware_dermedge/band/tools/tune.py`). Recorded on 25 October 2026 w
 
 | Person | Clips | Hand wearing the board | Notes |
 |---|---|---|---|
-| P01 | 16 | not recorded | the first session, before the recorder asked for the hand |
+| P01 | 16 | right | the first session |
 | P02 | 4 | right | round 1 rest, nails, fingers and waving only: the band restarted mid-session and the other clips came out empty, so they're left out |
 | P03 | 16 | right | |
 | P04 | 16 | right | |

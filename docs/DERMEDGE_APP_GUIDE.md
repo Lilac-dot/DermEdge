@@ -155,9 +155,11 @@ The band's screen uses a much deeper version (rose `#D84A78`, pink card `#F6B3C6
   yet. Research (the ADAM sensor study: Chun et al., *Sci. Adv.* 7, eabf9405, 2021) shows the clearest scratch
   signal is a 100-800 Hz skin vibration, which this misses, including finger-only scratching.
   Planned: sample faster (the ADXL345 goes to 3200 Hz) and move the sensor to the back of the hand.
-- **Sensors still to add:** lesional temperature (a thermistor or LM35 on the lesion and one on
-  healthy skin; the difference matters), GSR for stress, and maybe a moisture sensor. Their API
-  fields already exist.
+- **Sensors still to add:** GSR and one skin-temperature thermistor, both for the stress model,
+  and maybe a moisture sensor. The `gsr` and `moisture` fields already exist; `temperatures`
+  (`lesion_c`, `reference_c`) was designed for a lesion-vs-healthy pair, now future scope, and
+  will change to one skin temperature alongside GSR. See the decisions log in
+  [HARDWARE_PLAN.md](HARDWARE_PLAN.md).
 - **Security:** fine for a prototype. Wi-Fi between the band and the hub is plain HTTP today
   (HTTPS planned), and the hub's older photo and journal endpoints don't have the login yet.
   Real clinical use would mean meeting health-data rules such as HIPAA.

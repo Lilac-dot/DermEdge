@@ -2,7 +2,20 @@
 
 Where the hardware stands, which sensors are coming and on which pins, and how the pieces talk.
 For building an app against it, see [DERMEDGE_APP_GUIDE.md](DERMEDGE_APP_GUIDE.md); for the
-band's firmware, [firmware_dermedge/band/README.md](../firmware_dermedge/band/README.md).
+band's firmware, [firmware_dermedge/band/README.md](../firmware_dermedge/band/README.md). What the
+wearable datasets show and how we augment and validate: [SENSOR_DATA.md](SENSOR_DATA.md).
+
+## Decisions log
+
+Newest first. Each decision is reflected in the sections below.
+
+| Date | Decision | Why |
+|---|---|---|
+| 25 Oct 2026 | **ESP32-CAM moves to future scope.** Photos for the finale come from the phone or laptop camera in the website and hub. The firmware and its 300 KB model stay in the repo. | Time before the finale goes to the band. |
+| 25 Oct 2026 | **Skin temperature is a stress-model input only: one thermistor, not a lesion-vs-healthy pair.** The pair moves to future scope. | Most dermatologists we spoke to said skin temperature is too variable to be an eczema marker; one said lesions run warmer. In WESAD it drops under stress in 12 of 15 people, and the stress model uses it heavily (about 31% of its splits). |
+| 25 Oct 2026 | **NTC thermistor, not LM35.** | Runs on 3V3 (the LM35 needs 5V), and moves ~33 mV/°C at skin temperature against the LM35's 10. The conversion code is in `archive/gsr_wristband_wifi/main/signals.c`. |
+| 25 Oct 2026 | **Augment real data with our sensors' measured noise; don't synthesise paired data.** No generated stress or GSR for the Southampton patients. Each sensor model trains on its own dataset (late fusion). | Synthetic readings for real patients would be fabricated data, and a model would learn our assumptions back. Details in [SENSOR_DATA.md](SENSOR_DATA.md). |
+| 25 Oct 2026 | **One-day volunteer pilot** with a friend with eczema, as a held-out test of the band's sensors on real eczema skin. Presented as an N = 1 feasibility pilot. | Only one day with the volunteer; that's enough to check the hardware, not to learn trigger→flare links. |
 
 ## 1. The system
 
@@ -20,7 +33,7 @@ the same scale as the simulated one). Stress, moisture and the journal work as d
 
 The other diagrams: [stage 1](architecture/1_stage1_clip_rash.png),
 [stage 2](architecture/2_stage2_resnet_gradcam.png), [stage 3](architecture/3_stage3_severity.png),
-[the ESP32-CAM on-device screen](architecture/5_esp32_on_device.png).
+[the ESP32-CAM on-device screen](architecture/5_esp32_on_device.png) (future scope, see §9).
 
 ## 2. How the band talks to everything
 
@@ -67,7 +80,8 @@ snug, the same way round every time. Scratch vibration is strongest there and fa
 | 4 | TFT RESET | |
 | 21, 22 | I2C SDA, SCL: ADXL345 (and MAX30100 if added) | the ESP32's default I2C pins |
 | 27 | touch pad OUT1 | |
-| 34, 35 | **planned:** lesional temperature, lesion and reference | ADC1, input only |
+| 34 | **planned:** skin temperature thermistor (stress model) | ADC1, input only |
+| 35 | spare ADC1 (was the lesion-vs-healthy pair's second thermistor, now future scope) | ADC1, input only |
 | 32 | **planned:** GSR | ADC1 |
 | 33 | **planned:** skin moisture, if the parts arrive | ADC1 |
 | 26, 25, 13 | spare: touch OUT2-4 if wanted | |
@@ -79,23 +93,27 @@ TFT's RESET, so that plan (in `archive/gsr_wristband_wifi/HARDWARE_GUIDE.md`) no
 
 ## 5. Sensors: what's coming
 
-### Lesional temperature (next sensor)
-Two sensors, one **on the lesion** and one on nearby **healthy skin**. The difference is what
-matters: it cancels room and body temperature, and inflamed skin runs warmer.
-- **Preferred: two 10 kΩ NTC thermistors**, each in a divider with a 10 kΩ resistor from 3V3, to
-  GPIO 34 and 35. Small beads sit flat on skin.
-- **Fallback: two LM35s.** They need **5V** on +Vs (at least 4 V; on 3V3 they read wrongly low).
-  Output is 10 mV/°C, about 0.33 V at skin temperature, which is safe for the ESP32. Flat side
-  facing you, legs down: left +Vs to 5V, middle Vout to the ADC pin, right GND.
-- Both: keep the sensor away from the ESP32's own heat, tape it to the skin, and let it settle
-  a minute before trusting a reading.
-- It would add a `temperatures` reading (`lesion_c`, `reference_c`); the hub and website API
-  already accept it.
-
 ### GSR (stress)
 Skin conductance on GPIO 32, using the archived wristband's code (`archive/gsr_wristband_wifi/main/signals.c`)
 and the WESAD stress model (LightGBM, calibrated on the wearer's first calm minutes). GSR is much
 stronger on the fingers or palm than the wrist, so finger electrodes are worth it.
+
+### Skin temperature (with GSR, for the stress model)
+**One** sensor, under the band and taped flat to the skin. It feeds the stress model only, which
+was trained on the E4 wristband's skin temperature (it drops slightly under stress). It is **not**
+an eczema or flare signal: dermatologists told us skin temperature is too variable for that.
+- **10 kΩ NTC thermistor** (B3950 is common) in a divider: 3V3 → 10 kΩ resistor → GPIO 34 →
+  thermistor → GND. At skin temperature the pin sits around 1.3-1.5 V. Use 3V3, not 5V.
+- The archived wristband already has the conversion (B-value equation, 32 reads averaged per
+  sample, start-up range check): `archive/gsr_wristband_wifi/main/signals.c`, `signals_temp()`.
+  It comes into the band together with the GSR code.
+- Keep it away from the ESP32's own heat and let it settle a minute. Absolute accuracy is about
+  ±0.5-1 °C, which is fine: the model works on changes from the wearer's calm baseline.
+- Known limit: WESAD was recorded indoors. Walking outside or into air conditioning also drops
+  skin temperature, which the model could read as stress.
+- API: the hub's `temperatures` field (`lesion_c`, `reference_c`) was designed for the pair. The
+  stress model needs one skin temperature per sample in the same windows as GSR, so that field
+  changes when GSR is added.
 
 ### MAX30100 (optional)
 Relevant: the stress model was trained on PPG (pulse) as well as GSR, and stress lowers heart rate
@@ -131,6 +149,18 @@ vibration threshold has to come from real data:
 ADAM tested on held-out people for that reason. Night-time is the easy case, with few lookalike
 activities.
 
+**Validation plan:**
+1. All three of us record the `tools/record.py` session, so the model can be tested
+   leave-one-person-out (train on two, test on the third), not only on a held-out round.
+2. Augment the training recordings only: small axis rotations (the board sits at a slightly
+   different angle), ±10% scaling, added noise at the ADXL345's measured level, and slight time
+   stretching. Never augment the test data.
+3. **Volunteer day:** the friend with eczema wears the band for one session (about 3 hours, plan
+   in [SENSOR_DATA.md](SENSOR_DATA.md)). Their recording is never used for training; it's the
+   final test on real eczema skin: "caught X of Y scratches".
+4. Only scratches made by the hand wearing the band count; a band can't see the other hand.
+   Record a few anyway and report them as a known limit.
+
 ## 7. Security and privacy
 
 - **Bluetooth:** LE Secure Connections with a 6-digit passkey shown on the band, bonded; every
@@ -146,8 +176,18 @@ activities.
 
 ## 8. Roadmap
 
-1. Train and test the scratch model on recordings (in progress).
-2. Lesional temperature pair on GPIO 34/35, shown on the band and fed into the flare risk.
-3. GSR on GPIO 32 with the stress model; MAX30100 if wanted.
-4. The hub's own dashboard page: the same Home tab, band connection and camera fix as the website.
-5. Off the breadboard: perfboard, then a PCB.
+1. Train and test the scratch model on recordings (in progress), then the volunteer day.
+2. GSR on GPIO 32 and the skin-temperature thermistor on GPIO 34, with the stress model;
+   MAX30100 if wanted.
+3. The hub's own dashboard page: the same Home tab, band connection and camera fix as the website.
+4. Off the breadboard: perfboard, then a PCB.
+
+## 9. Future scope
+
+Not part of the finale build; kept so the work isn't lost.
+- **ESP32-CAM on-device screen** (`firmware_dermedge/esp32cam_screen/`): a 300 KB INT8 model
+  that screens photos on the camera itself. It builds, but hasn't run on a board.
+- **Lesion-vs-healthy temperature pair:** two thermistors, one on the lesion and one on healthy
+  skin, with the difference as a flare signal. Revisit only with dermatologist support and
+  data showing it tracks flares.
+- **A second band** for the other hand, so scratching with either hand is seen.

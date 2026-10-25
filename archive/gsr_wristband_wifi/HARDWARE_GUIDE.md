@@ -5,7 +5,7 @@
 # DermEdge wristband: hardware guide
 
 Everything the hardware side needs in one place: what the wristband feeds into, what is real
-vs simulated today, how to add the LM35 skin-temperature sensor to the breadboard, how to
+vs simulated today, how to add the thermistor skin-temperature sensor to the breadboard, how to
 record scratching, and how to test against the hub. Build/flash basics are in `README.md`
 next to this file.
 
@@ -52,7 +52,7 @@ wearer, so what matters is each signal's *change* from that baseline, not its ex
 | Sensor | Today | Pin | Real data behind it |
 |---|---|---|---|
 | GSR | Simulated, or Grove GSR module | GPIO34 (ADC1 ch6) | WESAD |
-| Skin temperature | Simulated, or **LM35 (new, see §4)** | GPIO35 (ADC1 ch7) | WESAD |
+| Skin temperature | Simulated, or **NTC thermistor (new, see §4)**; LM35 also supported | GPIO35 (ADC1 ch7) | WESAD |
 | Moisture patch | Simulated, or ESP32 touch pins as crude electrodes | GPIO4 (eczema area), GPIO15 (healthy skin) | Southampton e-textile study |
 | PPG / pulse | Simulated | – | WESAD |
 | Accelerometer | Simulated (no IMU wired) | – | WESAD |
@@ -67,55 +67,67 @@ section 2 uses a Pulse Sensor Amped (analog, easy) or a MAX30101 (I2C, better). 
 PPG and heart rate real. Its ECG and respiration builds aren't needed: the model only uses
 wrist signals.
 
-## 4. Adding the LM35 to the breadboard
+## 4. Adding the thermistor to the breadboard
 
 ### Parts
-- LM35 temperature sensor (TO-92 package, three legs)
-- 3 jumper wires, long enough that the LM35 can sit on the wrist **away from the ESP32**
+- **NTC thermistor, 10k** at 25 °C. A small epoxy bead, or a sealed probe on a lead, sits best
+  on skin. Note its **B value** from the listing (usually 3950, sometimes 3435).
+- **10k resistor** (the same value as the thermistor)
+- Jumper wires, long enough that the thermistor sits on the wrist **away from the ESP32**
   (the board's own heat skews the reading)
 - Heat-shrink or tape for the joints, plus an elastic band or tape to hold it on the skin
 
 ### Wiring
-Hold the LM35 with the **flat side facing you**, legs down:
+A voltage divider. The thermistor has two legs and no polarity:
 
 ```
-LM35 left   (+Vs)  ──► ESP32 5V / VIN     ← NOT 3V3: the LM35 needs at least 4 V
-LM35 middle (Vout) ──► ESP32 GPIO35
-LM35 right  (GND)  ──► ESP32 GND
+ESP32 3V3 ──► 10k resistor ──┬──► ESP32 GPIO35
+                             └──► thermistor ──► ESP32 GND
 ```
 
-- 5V/VIN is live whenever the board is on USB.
-- On 5V the output is still only ~300–350 mV at skin temperature (10 mV per °C), so it is safe
-  for the ESP32's 3.3 V input.
+- Use **3V3, not 5V**: the pin voltage must stay under 3.3 V.
+- At skin temperature the pin sits around 1.3–1.5 V, moving about 33 mV per °C (an LM35 moves
+  10 mV per °C), so it's more sensitive.
 - GPIO35 is an ADC1 pin. Don't move it to an ADC2 pin: ADC2 stops working while WiFi is on.
   It must also differ from the GSR pin (GPIO34).
+- **Using a module board instead** (e.g. a 3-pin "NTC thermistor module")? It usually has the
+  10k resistor built in: signal pin → GPIO35, + → 3V3, − → GND. If the reading goes *up* when
+  you cool the sensor, its resistor is on the other side: swap the + and − wires.
 
 ### Turning it on in the firmware
-1. Open `firmware_dermedge/wristband` in VS Code (the project folder itself, not the parent).
-2. SDK Configuration Editor → **DermEdge wristband → Skin temperature source → LM35 on an ADC pin**.
-   The channel defaults to 7 (= GPIO35).
-3. Build, Flash, Monitor. The start-up log prints the first reading:
-   - `LM35 reads 32.4 C` → working.
-   - `LM35 reads 4.1 C -- check the wiring ...` → usually +Vs is on 3V3 instead of 5V, or a
-     wire is in the wrong hole.
+1. Open `archive/gsr_wristband_wifi` in VS Code (the project folder itself, not the parent).
+2. SDK Configuration Editor → **DermEdge wristband → Skin temperature source → NTC thermistor
+   in a voltage divider**. The channel defaults to 7 (= GPIO35).
+3. Check the three numbers underneath it: resistance at 25 °C (10000), B value (3950) and the
+   fixed resistor (10000). Change them if your parts differ. For a more accurate reading,
+   measure the fixed resistor with a multimeter and enter the measured value.
+4. Build, Flash, Monitor. The start-up log prints the first reading:
+   - `thermistor reads 32.4 C` → working.
+   - `thermistor reads 0.0 C -- check the wiring ...` → a wire is loose or the pin is shorted.
+   - Reads about 15–20 °C on the wrist and *drops* when you warm it → the thermistor and the
+     resistor are swapped.
+   - Reads a few degrees off a real thermometer → check the B value.
 
-The firmware averages 32 ADC reads per sample because a single ESP32 reading is noisy by about
-as much as the ~1 °C calm→stress shift the model looks for. Code: `wristband/main/signals.c`
-(`signals_temp`).
+The firmware converts the pin voltage to resistance, then to temperature with the B-value
+equation, and averages 32 ADC reads per sample because a single ESP32 reading is noisy. Code:
+`main/signals.c` (`signals_temp`). The older LM35 option is still in the same menu.
 
-> ⚠️ The LM35 firmware change hasn't been compiled yet: ESP-IDF wasn't installed on the
+> ⚠️ The thermistor firmware change hasn't been compiled yet: ESP-IDF wasn't installed on the
 > laptop it was written on. If the first build errors, send the error output over.
 
 ### Before trusting it
-- **Warm-up:** leave it on the wrist 2–3 minutes before starting. The TO-92 package heats slowly,
-  and the first 90 s are used for calibration.
+- **Warm-up:** leave it on the wrist 1–2 minutes before starting (a small bead settles
+  quickly), and remember the first 90 s are used for calibration.
 - **Sanity check:** hold a normal thermometer next to it once. Wrist skin should read about
   **30–35 °C** (that's where the WESAD participants sit).
-- **Accuracy:** ±0.5 °C sensor + ADC noise. Fine, because the model works on changes from the
-  wearer's own baseline.
+- **Accuracy:** typically ±0.5–1 °C in absolute terms (1 % thermistor and resistor tolerance, a
+  rough B value, ADC error), but changes are tracked much more finely than that. That's fine,
+  because the model works on changes from the wearer's own baseline.
+- **Keep it on the skin, not in the air:** tape it flat against the wrist. A bead touching only
+  air reads room temperature and follows every draught.
 - **If buying new parts instead:** the **MAX30205** is made for body temperature (±0.1 °C),
-  runs on 3.3 V and is digital (I2C), which avoids the 5 V and ADC-noise issues. It would need a
-  small firmware addition.
+  runs on 3.3 V and is digital (I2C), which avoids the ADC noise. It would need a small
+  firmware addition.
 
 ## 5. Real datasets behind the sensors (for reference and the pitch)
 
@@ -132,7 +144,7 @@ calm baseline and a stress task (public speaking + mental arithmetic). Summary i
 | Heart rate goes **up** (e.g. 73 → 120 bpm) | 14 / 15 |
 | Skin temperature goes slightly **down** | 12 / 15 |
 
-So the LM35 should show a small drop under stress, not a rise.
+So the thermistor should show a small drop under stress, not a rise.
 
 Gotcha if you slice these CSVs yourself: the phase times in `S*_quest.csv` count from the
 *chest* strap's start, and the wristband started 15–24 min earlier. Shift by each person's

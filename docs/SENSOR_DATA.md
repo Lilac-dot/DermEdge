@@ -1,8 +1,8 @@
 # Sensor data: what we have, what it shows, where the models go next
 
 Notes from 24 Oct 2026, when we downloaded and checked the real datasets behind the wristband.
-Start here if you're picking up the wearable models. Hardware and wiring are in
-`firmware_dermedge/HARDWARE_GUIDE.md`.
+Start here if you're picking up the wearable models. Hardware, pins and the decisions log are in
+[HARDWARE_PLAN.md](HARDWARE_PLAN.md).
 
 ## Summary
 
@@ -79,16 +79,81 @@ patients.
 | Corneometer (clinical hydration standard) lower on eczema skin (by 12–55 %) | ✔ | 13 / 13 |
 | Water loss (TEWL) higher on eczema skin | ✔ | 7 / 7 |
 
+Units in `moisture_patient_summary.csv` (the patient CSVs don't label them; worked out from the
+rest of the dataset):
+
+| Columns | Unit |
+|---|---|
+| `sensor_eczema`, `sensor_healthy` | pF: the e-textile patch's capacitance (their GUI logs "Total Capacitance (pF)"); wetter skin reads higher |
+| `corneo_eczema`, `corneo_healthy` | A.U., the Corneometer's arbitrary 0-120 scale (labelled A.U. in the thesis's own tables) |
+| `TEWL_eczema`, `TEWL_healthy` | g/m²/h, the standard TEWL unit (not stated in the dataset) |
+| `*_deficit_pct` | %: our calculation, (1 − eczema / healthy) × 100 for the same patient |
+
+Our own moisture sensor won't read in pF, so only the **percentage deficit** carries over.
+
 How big the sensor's drop is only loosely tracks the Corneometer (r = 0.34). Claim that it
 *detects* drier eczema skin, not that it *measures* dryness clinically. The zip also contains a
 `SkinSensorGUI.exe`; it isn't needed, so don't run it.
 
 ### Scratching: no public dataset
-Plan: a pilot recording from one volunteer with eczema, wearing a phone or smartwatch
-accelerometer (e.g. phyphox, CSV export). Include labelled scratch episodes and look-alike
-movements (typing, brushing teeth, waving), with written consent and no names in file names.
-Details are in `firmware_dermedge/HARDWARE_GUIDE.md` §6. Describe it as an N-of-1 pilot, not a
-validated detector.
+Published studies (Ji et al., npj Digit. Med. 2023; Moreau et al., IEEE JBHI 2018; the ADAM
+sensor, Chun et al., Sci. Adv. 2021) didn't release their recordings, and none uses our
+hardware. So the scratch model trains on our own recordings from the DermEdge band (ADXL345 at
+800 Hz on the back of the hand): `tools/record.py` and `tools/tune.py`, see
+[HARDWARE_PLAN.md](HARDWARE_PLAN.md) §6. The volunteer day below is its held-out test.
+
+## Augmentation plan
+
+The organisers allow synthetic data. We use it as **data augmentation**: modified copies of
+real recordings, so a model trained on research-grade sensors copes with ours.
+
+**Our sensors differ from the datasets' in three ways**, and each needs handling:
+
+| Difference | Handling |
+|---|---|
+| Scale (pF or µS vs a raw ESP32 count) | Work in relative terms: change from the wearer's calm baseline (stress), or % deficit vs the same person's healthy skin (moisture) |
+| Sensitivity | Moisture: measure our sensor's % change on dry vs moisturised skin. Compare it with Southampton's own dry vs treated test (`Chapter5_SilverIDC/Encapsulated_Silver_IDC_Study/VolunteerTest/`, not yet checked), and scale their deficits by the ratio |
+| Noise, drift, steps | Measure them on our own hardware (below) and add them to each copy |
+
+**Bench measurements** (on any of us, before the volunteer day): each sensor held still on skin
+for 10 minutes (noise and drift); moisture patch pressed lightly vs firmly; moisture before and
+15 minutes after moisturiser; GSR and thermistor through 5 min calm, 5 min mental arithmetic and
+5 min rest.
+
+**Rules:**
+1. Split by person (or patient) **first**, then augment only the training people.
+2. Test on **real, un-augmented** held-out data, and report only those numbers.
+3. Augmentation adds variety, not information. 13 Southampton patients stay 13 patients, and no
+   augmentation turns healthy WESAD people into eczema flares.
+4. **Don't synthesise paired data.** No generated stress or GSR for the Southampton patients:
+   nothing in that data says what their stress was. Each sensor model trains on its own dataset
+   and outputs its own 0-1 score (late fusion); only the trigger→flare step would need data from
+   the same people, and that has to be real.
+5. "Virtual patients" (a WESAD person replayed together with a Southampton patient, as the
+   simulator does) are fine for demos and software tests, labelled as simulation. Never quote
+   accuracy from them.
+
+## Volunteer day (one-day pilot)
+
+One day, one friend with eczema, about 3 hours. Everything that doesn't need eczema skin is done
+on ourselves first (bench measurements above), so the volunteer's time goes to:
+
+| Time | Test | What it shows |
+|---|---|---|
+| 0:00 | Written consent, fit the band, 10 min sitting quietly | Calm baseline and noise on a real wearer |
+| 0:15 | Moisture patch on an eczema spot vs a matching healthy spot, alternated 10 times, 30 s each | Repeats the Southampton finding with our sensor |
+| 0:35 | Photos of the eczema site through the app, in different light | Real-patient test of the image stages |
+| 0:50 | Scratch recording: 3 blocks of 10 min mixing scratching with look-alikes, filmed (hands only) | Held-out test of the scratch model |
+| 1:30 | Optional 5 min stress task | Stress check on an eczema patient |
+| 1:45 | Moisture before and after their usual cream | Our sensor's response on eczema skin |
+
+- **Never ask them to scratch the eczema**: mimic on a sleeve or healthy skin; natural scratches
+  count too.
+- Clap or tap three times on camera at the start of each block, to line up video and data.
+- No faces or names in any file; recordings stay out of git. Ask Dr. Priyanka Dwivedi to look
+  over the consent form.
+- Present it as an **N = 1 feasibility pilot**, with claims like "our patch read lower on eczema
+  skin in X of 10 placements" and "caught X of Y scratches in a block it never trained on".
 
 ## Models: what exists and what to look into
 
@@ -121,5 +186,6 @@ Directions to look into:
    the same body site plus a daily 0–10 itch score and the journal. That's 14–28 labelled days:
    enough to show the model adapting, not enough to claim accuracy.
 
-Avoid: training on synthetic flare data and quoting its accuracy, and predicting eczema from
-WESAD, which has no eczema labels.
+Avoid: training on synthetic flare data and quoting its accuracy, predicting eczema from WESAD,
+which has no eczema labels, and treating skin temperature as an eczema signal (it's a stress
+input only; see the decisions log in [HARDWARE_PLAN.md](HARDWARE_PLAN.md)).

@@ -15,7 +15,7 @@ Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the
 ## How it works
 
 ```
-ESP32-CAM / webcam ─► [1] Normal vs rash ─► [2] Eczema vs 7 look-alikes ─► [3] Severity 0–12
+Phone / laptop cam ─► [1] Normal vs rash ─► [2] Eczema vs 7 look-alikes ─► [3] Severity 0–12
                                                                                │
 DermEdge band + GSR, moisture ─► scratching, stress, hydration ──────────► Flare risk + tips
                                                                                │
@@ -27,8 +27,10 @@ DermEdge band + GSR, moisture ─► scratching, stress, hydration ────�
 | 1. Normal vs rash | CLIP ViT-B/16 + fine-tuned head | Laptop hub | **AUC 0.93** on held-out real phone photos (SCIN, 5-fold CV by case) |
 | 2. Eczema vs look-alikes | ResNet18 | Laptop hub | **81.1% accuracy, 82.5% recall** (curated test split, 507 images) |
 | 3. Severity | Ridge head on CLIP features, 0–12 EASI-signs score | Laptop hub | Mean error **1.2 points**; band within one step **97.6%** |
-| On-device screen | MobileNetV1-0.25 INT8, 300 KB | ESP32-CAM | **97.1%** accuracy on its test set |
 | Stress | LightGBM on GSR, skin temp, PPG, motion, calibrated per wearer | Laptop hub | **AUC 0.92–0.94** leave-one-person-out (WESAD) |
+| *Future scope:* on-device screen | MobileNetV1-0.25 INT8, 300 KB | ESP32-CAM | **97.1%** accuracy on its test set |
+
+Skin temperature is used only inside the stress model, not as an eczema signal. Plan, decisions and future scope: [docs/HARDWARE_PLAN.md](docs/HARDWARE_PLAN.md).
 
 Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis, insect bites, lichen planus, drug eruption and rosacea.
 
@@ -76,7 +78,7 @@ On macOS without Homebrew's `libomp`, LightGBM borrows PyTorch's copy (see `app/
 **Wearable simulation:** the *Calm day / Stressful day / Itchy night / Flare* buttons replay real recordings, which can't be redistributed here. To enable them, place the WESAD windows at `dataset/WESAD/wesad_raw_windows.npz` and the Southampton e-textile patient CSVs in `dataset/southampton_moisture/PatientTest/` (sources below). Without them, the buttons are disabled and the hub still accepts live data from the wristband.
 
 ## Firmware
-`firmware_dermedge/` has two ESP-IDF projects: the **DermEdge band** and the **ESP32-CAM** screen. Both build with ESP-IDF v5.4.1; see `firmware_dermedge/README.md`.
+`firmware_dermedge/` has two ESP-IDF projects: the **DermEdge band**, and the **ESP32-CAM** screen (future scope, not part of the finale build). Both build with ESP-IDF v5.4.1; see `firmware_dermedge/README.md`.
 
 **The band** (`firmware_dermedge/band/`) is an ESP32 with a 1.8" ST7735 screen and an add-on board, on a breadboard. It detects scratching from an ADXL345 accelerometer (strong, rhythmic motion at 2.5-8 strokes a second, which rules out walking, typing and jolts), records sessions that start and stop from a touch pad or the app, and talks to the app over Bluetooth LE paired with a 6-digit code shown on its screen. The app relays readings to the hub (`app/band.py`), which stores them behind a login and raises flare alerts that the band shows. Its screens use the website's fonts and a deeper version of its palette:
 
@@ -110,4 +112,4 @@ The training scripts in `scripts/` rebuild the product's models from the researc
 What the wearable datasets show, where to download them, and next steps for the wearable models: `docs/SENSOR_DATA.md`.
 
 ## Limitations
-DermEdge is a screening aid, not a diagnosis. The on-device models and the darker-skin calibration would benefit from more real-world photos, the ESP32-CAM firmware hasn't been tested on a board yet. The band runs on a breadboard, but its scratch detection is motion only at 100 Hz with thresholds not yet tuned on real recordings; the ADAM sensor study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021) found the clearest scratch signal is a 100-800 Hz skin vibration that 100 Hz sampling misses, including finger-only scratching. Faster sampling (the ADXL345 goes to 3200 Hz) is the planned fix.
+DermEdge is a screening aid, not a diagnosis. The on-device models and the darker-skin calibration would benefit from more real-world photos, the ESP32-CAM firmware (future scope) hasn't been tested on a board yet. The band runs on a breadboard, but its scratch detection is motion only at 100 Hz with thresholds not yet tuned on real recordings; the ADAM sensor study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021) found the clearest scratch signal is a 100-800 Hz skin vibration that 100 Hz sampling misses, including finger-only scratching. Faster sampling (the ADXL345 goes to 3200 Hz) is the planned fix.

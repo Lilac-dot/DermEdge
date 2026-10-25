@@ -3,7 +3,7 @@
 | Project | Board | What it does |
 |---|---|---|
 | `band/` | Plain ESP32 dev board + 1.8" ST7735 TFT + add-on board (ADXL345, touch pads) | **The DermEdge band.** Detects scratching from the accelerometer, starts and stops recordings from a touch pad or the app, shows its state in the website's palette and fonts, and talks to the app over encrypted Bluetooth LE. See [band/README.md](band/README.md). |
-| `esp32cam_screen/` | AI-Thinker ESP32-CAM | Captures a photo every 3 s, screens it for eczema with a 300 KB INT8 model on TFLite Micro (or asks the hub), lights the red LED, and sends positives to the hub over Wi-Fi for the full analysis (eczema vs look-alikes, severity, flare risk). |
+| `esp32cam_screen/` | AI-Thinker ESP32-CAM | **Future scope**, not part of the finale build. Captures a photo every 3 s, screens it for eczema with a 300 KB INT8 model on TFLite Micro (or asks the hub), lights the red LED, and sends positives to the hub over Wi-Fi for the full analysis (eczema vs look-alikes, severity, flare risk). |
 
 `components/dermedge_net/` is the camera's Wi-Fi connection and HTTP calls to the hub. The
 first Wi-Fi GSR wristband is in `../archive/gsr_wristband_wifi/`.

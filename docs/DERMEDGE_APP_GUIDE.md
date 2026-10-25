@@ -64,9 +64,12 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
 - `t` is seconds since the band started that recording. Batch a few, drop `r`, and
   `POST /api/band/sessions/{id}/readings`. For accurate times when the hub session started later
   than the band (offline recording), send `ts = now - (status.el - t)` instead of `t`.
-- The band buffers about **an hour** of readings while disconnected (about **27 minutes** with
-  the GSR on, since it adds a reading a second) and sends them when the link comes back (status
-  `"s":"syncing"`, `q` counting down).
+- The band keeps readings in its **flash** while disconnected: about **20 hours** with the GSR on,
+  and they survive a restart or a flat battery. It sends them, oldest first, when the link comes
+  back (status `"s":"syncing"`, `q` counting down; a long backlog takes a while over Bluetooth).
+  Recording numbers `r` keep counting across restarts, so they stay unique. When the flash fills,
+  the band keeps the oldest data and thins the new: from 90% full, motion summaries every 10 s
+  only; from 98%, scratch episodes only.
 - **Sensor readings** (GSR, skin temperature, moisture). The website already relays, stores and
   charts these. Same `r` and `t` as above, and a message may carry several items. What the band's
   firmware sends (checked against the website's code, 26 Oct):

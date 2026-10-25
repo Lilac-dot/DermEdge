@@ -51,7 +51,19 @@ Over USB serial (`./idf.sh -p /dev/cu.SLAB_USBtoUART monitor`, or any serial ter
 | `gsr cal` | with the electrodes **off** the skin: store this module's no-skin reading (about 512) |
 | `sim on` / `sim stress` / `sim off` | simulated calm / stressed readings instead of the sensors |
 | `start` / `stop` | start or stop a recording, like the touch pad (works without the website) |
-| `peek` | the last few readings exactly as they'll go out over Bluetooth |
+| `peek` / `peek 40` | the next readings exactly as they'll go out over Bluetooth (from position 40) |
+| `outbox clear` | drop every reading waiting to be sent (test recordings, say) |
+
+## Offline storage
+
+Readings wait for the phone in flash (`main/store.c`, the 2.4 MB `outbox` partition in
+`partitions.csv`): about 159,000 readings, roughly 20 hours with GSR on, kept across restarts and
+flat batteries. Items are written in two steps, so one half-written when the power goes is
+skipped, and marked sent only after they're out, so a restart sends anything unconfirmed again.
+When it fills, older data is kept and new data thins out: motion every 10 s from 90% full, only
+scratch episodes from 98% (the band says "Memory full: scratches"). Recording numbers are kept in
+NVS, so they stay unique across restarts. Erasing a 4 KB sector pauses the chip for about 45 ms
+about every 2 minutes while recording, which costs a few accelerometer samples.
 
 ## States and screens
 

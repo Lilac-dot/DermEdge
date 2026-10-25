@@ -57,7 +57,8 @@ The other diagrams: [stage 1](architecture/1_stage1_clip_rash.png),
 ```
 
 - **Band:** records sessions started from its touch pad or the app, detects scratch episodes,
-  and buffers about an hour of readings while disconnected.
+  and keeps about 20 hours of readings in its flash while disconnected (a 2.4 MB partition; they
+  survive a restart; when it fills, new motion and GSR thin out before any scratch is lost).
 - **Website (Vercel):** pairs with the band from the Home tab, relays its readings into recording
   sessions stored in the browser, feeds scratching into the flare risk, and sends high-risk
   alerts back to the band's screen (a double tap there dismisses them on both).

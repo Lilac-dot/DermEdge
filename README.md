@@ -49,7 +49,7 @@ At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I�
 - "Not sure, see a dermatologist" when the models disagree or are uncertain
 - Body-site tracking with before/after comparison ("inner elbow 6.1 → 4.3, better")
 - Wearable markers: stress, heart rate, skin conductance, skin temperature, hydration deficit, night scratching
-- **DermEdge band**: connect it from the Home tab (Chrome or Edge, Web Bluetooth, a 6-digit pairing code); an ESP32 wristband that detects scratching from its accelerometer, starts and stops recordings from a touch pad or the app, buffers an hour offline, and shows flare alerts on its own screen
+- **DermEdge band**: connect it from the Home tab (Chrome or Edge, Web Bluetooth, a 6-digit pairing code); an ESP32 wristband that detects scratching from its accelerometer, starts and stops recordings from a touch pad or the app, keeps about 20 hours of readings in its flash while offline (they survive a restart), and shows flare alerts on its own screen
 - Accounts and paired bands: recordings, scratch events and alerts stored on the hub behind a login, with encrypted, passkey-paired Bluetooth to the band
 - Daily flare risk with alerts and one tip per active trigger
 - Skin-type calibration (Fitzpatrick I–VI)

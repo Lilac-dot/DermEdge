@@ -1,7 +1,8 @@
 CONFIG_IDF_TARGET="esp32"
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-# NimBLE makes the app bigger than the default 1 MB app partition comfortably holds
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# A 1.5 MB app and a 2.4 MB outbox for offline readings (partitions.csv)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # Bluetooth LE only, through NimBLE, with bonds kept in flash
 CONFIG_BT_ENABLED=y

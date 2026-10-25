@@ -6,6 +6,7 @@
 #include "art.h"
 #include "display.h"
 #include "fonts.h"
+#include "store.h"
 #include "touch.h"
 
 // The website's teal theme (web/index.html, light). Its pale tints wash out on this panel, so
@@ -255,9 +256,15 @@ static void alert_card(const ui_model_t *m) {
     disp_ftext(&font_label, IN_X, FULL_B - 13, "Double-tap to dismiss", C_TEAL);
 }
 
-static void warning_strip(ui_warning_t w) {
+static void warning_strip(ui_warning_t w, bool scratch_only) {
     static const char *text[] = {"", "Memory nearly full", "Skin sensor not on skin", "Temp sensor not reading",
                                  "Offline: saving on band"};
+    if (w == WARN_STORAGE && scratch_only) {  // main.c keeps only scratch episodes from 98%
+        disp_round_rect(CARD_X, WARN_Y, CARD_W, 16, 6, C_BAD);
+        ICON(CARD_X + 6, WARN_Y + 4, WARN, 1, C_WHITE, C_BAD);
+        disp_ftext(&font_label, CARD_X + 18, WARN_Y + 2, "Memory full: scratches", C_WHITE);
+        return;
+    }
     uint16_t bg = w == WARN_STORAGE ? C_BAD : w == WARN_OFFLINE ? C_DEEP : C_WARN;
     disp_round_rect(CARD_X, WARN_Y, CARD_W, 16, 6, bg);
     ICON(CARD_X + 6, WARN_Y + 4, WARN, 1, C_WHITE, bg);
@@ -299,6 +306,6 @@ void ui_render(const ui_model_t *m) {
     default: break;
     }
     if (alert) alert_card(m);
-    else if (warn) warning_strip(warn);
+    else if (warn) warning_strip(warn, m->outbox_cap && m->sm->outbox >= STORE_SCRATCH_ONLY * m->outbox_cap);
     disp_flush();
 }

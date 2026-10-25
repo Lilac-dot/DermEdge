@@ -63,6 +63,8 @@ int main(int argc, char **argv) {
     shot(dir, "10_warning_offline", ST_RECORDING, SCR_RECORDING, WARN_OFFLINE);
     sm.outbox = 3100;
     shot(dir, "11_warning_memory", ST_RECORDING, SCR_RECORDING, WARN_STORAGE);
+    sm.outbox = 3560;  // 98.9%: only scratch episodes are stored now
+    shot(dir, "11b_warning_memory_full", ST_RECORDING, SCR_RECORDING, WARN_STORAGE);
     sm.outbox = 412, sm.linked = true, m.temp_state = SENSOR_ABSENT;
     shot(dir, "12_sensors", ST_RECORDING, SCR_SENSORS, WARN_NONE);
     m.held_ms = 700;

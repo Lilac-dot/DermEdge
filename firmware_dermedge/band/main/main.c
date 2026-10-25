@@ -29,7 +29,9 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "scratch.h"
+#include "esp_partition.h"
 #include "skin.h"
+#include "store.h"
 #include "skin_adc.h"
 #include "touch.h"
 #include "ui.h"
@@ -43,7 +45,6 @@ static const char *TAG = "band";
 #define STATUS_MS 1000
 #define FRAME_MS 250      // redraw rate for animated screens
 #define SENSOR_RETRY_MS 2000
-#define OUTBOX_LEN 3600   // one motion summary a second: an hour offline
 #define SENDS_PER_LOOP 6
 
 // --- messages from the Bluetooth task ----------------------------------------------------
@@ -80,23 +81,34 @@ _Static_assert(sizeof(item_t) == 16, "an item is 16 bytes");
 static item_t item(uint32_t rec, item_kind_t kind, float t, float a, float b) {
     return (item_t){.recording = (uint16_t)rec, .kind = kind, .t = t, .a = a, .b = b};
 }
-static item_t *outbox;  // on the heap: Bluetooth leaves too little static RAM for it
-static int ob_len, ob_head, ob_count;
+// The outbox lives in flash (the "outbox" partition, store.c): about 159,000 readings, roughly
+// 20 hours offline with GSR on, kept across restarts. When it fills, older data is kept and new
+// data thins out: motion every 10 s from 90%, only scratch episodes from 98%, and when it's
+// completely full a scratch episode replaces the oldest sector.
+static store_t store;
+static const esp_partition_t *outbox_part;
+static int ob_len, ob_count;  // capacity, and readings waiting (kept in step with the store)
+
+static int part_read(void *c, uint32_t off, void *b, uint32_t n) { return esp_partition_read(outbox_part, off, b, n); }
+static int part_write(void *c, uint32_t off, const void *b, uint32_t n) { return esp_partition_write(outbox_part, off, b, n); }
+static int part_erase(void *c, uint32_t off) { return esp_partition_erase_range(outbox_part, off, STORE_SECTOR); }
 
 static void ob_alloc(void) {
-    for (ob_len = OUTBOX_LEN; ob_len >= 60; ob_len /= 2)
-        if ((outbox = malloc(ob_len * sizeof(item_t)))) break;
-    ESP_LOGI(TAG, "outbox holds %d readings (%d min offline, about %d with GSR on)", ob_len, ob_len / 60,
-             ob_len * 10 / 22 / 60);
+    outbox_part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "outbox");
+    if (!outbox_part || store_open(&store, (store_flash_t){part_read, part_write, part_erase, NULL, outbox_part->size})) {
+        ESP_LOGE(TAG, "no outbox partition: flash the partition table (idf.py flash) and restart");
+        abort();
+    }
+    ob_len = store_capacity(&store);
+    ob_count = store_count(&store);
+    ESP_LOGI(TAG, "outbox in flash: %d readings (about %d h offline with GSR on), %d waiting from before",
+             ob_len, ob_len * 10 / 22 / 3600, ob_count);
 }
 
 static void ob_push(item_t it) {
-    if (ob_count == ob_len) {  // full: lose the oldest
-        ob_head = (ob_head + 1) % ob_len;
-        ob_count--;
-    }
-    outbox[(ob_head + ob_count) % ob_len] = it;
-    ob_count++;
+    if (!store_should_keep((float)ob_count / ob_len, it.kind == ITEM_SCRATCH, it.kind == ITEM_MOTION, it.t)) return;
+    if (!store_append(&store, &it, it.kind == ITEM_SCRATCH)) ESP_LOGW(TAG, "outbox full: reading dropped");
+    ob_count = store_count(&store);
 }
 
 static void ob_format(const item_t *it, char *buf, size_t n) {
@@ -125,12 +137,13 @@ static void ob_format(const item_t *it, char *buf, size_t n) {
 
 static void ob_send(void) {
     char buf[200];  // a GSR item is about 145 characters, under the ~180 a notification carries on macOS
-    for (int i = 0; i < SENDS_PER_LOOP && ob_count && ble_data_ready(); i++) {
-        ob_format(&outbox[ob_head], buf, sizeof(buf));
+    item_t it;
+    for (int i = 0; i < SENDS_PER_LOOP && ble_data_ready() && store_peek(&store, &it); i++) {
+        ob_format(&it, buf, sizeof(buf));
         if (!ble_notify_data(buf)) break;  // radio busy: try next loop
-        ob_head = (ob_head + 1) % ob_len;
-        ob_count--;
+        store_pop(&store);  // only once it's out: a restart before this sends it again
     }
+    ob_count = store_count(&store);
 }
 
 // --- state -------------------------------------------------------------------------------
@@ -202,6 +215,25 @@ static void skin_results(uint32_t now) {
             }
         }
     }
+}
+
+// The recording number tags every reading, and readings now outlive a restart in flash, so the
+// number does too: otherwise recording 1 before a restart and a new recording 1 after it would
+// look like one recording to the website.
+static void load_recording_number(void) {
+    nvs_handle_t h;
+    uint32_t r;
+    if (nvs_open("band", NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_get_u32(h, "rec_no", &r) == ESP_OK) sm.recording = r;
+    nvs_close(h);
+}
+
+static void save_recording_number(void) {
+    nvs_handle_t h;
+    if (nvs_open("band", NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u32(h, "rec_no", sm.recording);
+    nvs_commit(h);
+    nvs_close(h);
 }
 
 static void save_token(const char *token) {
@@ -307,13 +339,15 @@ static int command(char *c);
 static int handle(sm_event_t ev, uint32_t arg);
 static int serial_dirty;  // a serial command changed the state: redraw
 
-// Last few outbox items, formatted exactly as they'll go out over Bluetooth
-static void peek(void) {
+// The next few outbox items from position `from` (0 = the next to go out), formatted exactly as
+// they'll go out over Bluetooth
+static void peek(int from) {
     char buf[200];
-    int k = ob_count < 6 ? ob_count : 6;
-    printf("outbox: %d readings waiting%s\n", ob_count, k ? "; the newest:" : "");
-    for (int i = ob_count - k; i < ob_count; i++) {
-        ob_format(&outbox[(ob_head + i) % ob_len], buf, sizeof(buf));
+    printf("outbox: %d of %d readings waiting (%d%% full)%s\n", ob_count, ob_len, ob_count * 100 / ob_len,
+           ob_count ? "; next to go out:" : "");
+    item_t it;
+    for (int i = from; i < from + 6 && store_peek_nth(&store, i, &it); i++) {
+        ob_format(&it, buf, sizeof(buf));
         printf("  %s (%d bytes)\n", buf, (int)strlen(buf));
     }
 }
@@ -353,8 +387,13 @@ static void serial_commands(void) {
             esp_log_level_set("*", ESP_LOG_INFO);
             ESP_LOGI(TAG, "raw off; FIFO overruns %lu, buffer drops %lu", (unsigned long)fifo_overruns,
                      (unsigned long)buffer_drops);
-        } else if (!strcmp(line, "peek")) {
-            peek();
+        } else if (!strcmp(line, "outbox clear")) {  // drop everything waiting, e.g. test recordings
+            int n = ob_count;
+            while (store_count(&store)) store_pop(&store);
+            ob_count = 0;
+            ESP_LOGI(TAG, "outbox cleared: %d readings dropped", n);
+        } else if (!strncmp(line, "peek", 4)) {  // "peek", or "peek 40" to look further along
+            peek(atoi(line + 4));
         } else if (!strcmp(line, "start") || !strcmp(line, "stop")) {
             // like the touch pad's long press, so it works without the website too
             bool rec = sm.state == ST_RECORDING;
@@ -394,6 +433,7 @@ static int command(char *c) {
 // Carries out the state machine's effects; returns whether to redraw
 static int apply(int fx) {
     if (fx & FX_START_REC) {
+        save_recording_number();
         gsr_item.n = 0, temp_n = 0, temp_sum = 0;
         uint8_t c = DET_RESET;
         xQueueSend(det_cmds, &c, portMAX_DELAY);
@@ -457,6 +497,7 @@ void app_main(void) {
     ob_alloc();
     ui.outbox_cap = ob_len;
     sm_init(&sm);
+    load_recording_number();
     pad_init(&pad);
     disp_init();
     ui_render(&ui);  // boot screen

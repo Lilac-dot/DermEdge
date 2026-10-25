@@ -2,10 +2,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../main/app_sm.h"
 #include "../main/scratch.h"
 #include "../main/skin.h"
+#include "../main/store.h"
 #include "../main/touch.h"
 #include "../main/ui_flow.h"
 
@@ -299,11 +301,109 @@ static void test_ui_flow(void) {
     CHECK(ui_flow_screen(&f, &in) == SCR_SENSOR_ERROR, "no accelerometer: the error screen");
 }
 
+// --- the flash outbox ------------------------------------------------------------------
+// A simulated NOR flash: writes can only clear bits, an erase sets a whole sector to 0xFF
+#define SIM_SECTORS 8
+static uint8_t sim_mem[SIM_SECTORS * STORE_SECTOR];
+static int sim_erases, sim_write_limit = -1;  // stop writing after this many bytes: power lost
+static int sim_read(void *c, uint32_t off, void *buf, uint32_t len) { (void)c; memcpy(buf, sim_mem + off, len); return 0; }
+static int sim_write(void *c, uint32_t off, const void *buf, uint32_t len) {
+    (void)c;
+    for (uint32_t i = 0; i < len; i++) {
+        if (sim_write_limit == 0) return -1;
+        if (sim_write_limit > 0) sim_write_limit--;
+        sim_mem[off + i] &= ((const uint8_t *)buf)[i];
+    }
+    return 0;
+}
+static int sim_erase(void *c, uint32_t off) { (void)c; memset(sim_mem + off, 0xFF, STORE_SECTOR); sim_erases++; return 0; }
+static store_flash_t sim_flash(void) { return (store_flash_t){sim_read, sim_write, sim_erase, NULL, sizeof(sim_mem)}; }
+
+// a recognisable item: number n in bytes 4-7, byte 2 a kind (top bit left free)
+static void mk(uint8_t *b, uint32_t n) { memset(b, 0, STORE_ITEM); b[2] = (uint8_t)(n % 4); memcpy(b + 4, &n, 4); b[15] = (uint8_t)n; }
+static uint32_t num(const uint8_t *b) { uint32_t n; memcpy(&n, b + 4, 4); return n; }
+
+static void test_store(void) {
+    puts("flash outbox");
+    memset(sim_mem, 0xFF, sizeof(sim_mem));  // a blank chip
+    store_t st;
+    uint8_t b[STORE_ITEM];
+    CHECK(store_open(&st, sim_flash()) == 0 && store_count(&st) == 0, "opens a blank chip");
+    uint32_t cap = store_capacity(&st);
+    CHECK(cap == (SIM_SECTORS - 1) * STORE_PER_SECTOR, "capacity %u", (unsigned)cap);
+
+    for (uint32_t n = 0; n < 600; n++) mk(b, n), store_append(&st, b, false);
+    int bad = 0;
+    for (uint32_t n = 0; n < 250; n++) {
+        bad += !store_peek(&st, b) || num(b) != n || b[2] != n % 4 || b[15] != (uint8_t)n;
+        store_pop(&st);
+    }
+    CHECK(bad == 0, "first in, first out, bytes intact (%d wrong)", bad);
+
+    // a restart: open the same chip again
+    CHECK(store_open(&st, sim_flash()) == 0 && store_count(&st) == 350, "after a restart, %u unsent (want 350)", (unsigned)store_count(&st));
+    CHECK(store_peek(&st, b) && num(b) == 250, "and it carries on from item %u (want 250)", (unsigned)num(b));
+    CHECK(store_peek_nth(&st, 3, b) && num(b) == 253 && !store_peek_nth(&st, 350, b), "peek_nth looks ahead without sending");
+
+    // keep going round the ring many times: nothing lost, nothing repeated
+    uint32_t next_in = 600, next_out = 250;
+    sim_erases = 0;
+    for (int i = 0; i < 10 * (int)cap; i++) {
+        mk(b, next_in++);
+        if (!store_append(&st, b, false)) { bad++; break; }
+        if (store_count(&st) > cap / 2) {
+            store_peek(&st, b);
+            bad += num(b) != next_out++;
+            store_pop(&st);
+        }
+    }
+    CHECK(bad == 0, "ten times round the ring, every item once and in order");
+    CHECK(sim_erases <= 10 * SIM_SECTORS + 2, "each sector erased about once per lap (%d erases)", sim_erases);
+
+    // full: appends fail rather than lose unsent data, unless told to overwrite the oldest
+    while (store_append(&st, (mk(b, next_in), b), false)) next_in++;
+    uint32_t full = store_count(&st);
+    CHECK(full >= cap, "full at %u items (capacity %u)", (unsigned)full, (unsigned)cap);
+    store_peek(&st, b);
+    uint32_t oldest = num(b);
+    CHECK(store_append(&st, (mk(b, next_in), b), true), "an overwrite makes room");
+    store_peek(&st, b);
+    CHECK(num(b) > oldest && store_count(&st) < full, "by dropping the oldest sector (oldest now %u, was %u)", (unsigned)num(b), (unsigned)oldest);
+
+    // power lost halfway through writing an item: the half-item is skipped, nothing blends
+    memset(sim_mem, 0xFF, sizeof(sim_mem));
+    store_open(&st, sim_flash());
+    for (uint32_t n = 0; n < 10; n++) mk(b, n), store_append(&st, b, false);
+    sim_write_limit = 7;  // the next item gets 7 of its 16 bytes
+    mk(b, 999), store_append(&st, b, false);
+    sim_write_limit = -1;
+    store_open(&st, sim_flash());  // the restart after the power cut
+    for (uint32_t n = 10; n < 15; n++) mk(b, n), store_append(&st, b, false);
+    bad = 0;
+    for (uint32_t n = 0; n < 15; n++) {
+        if (!store_peek(&st, b)) { bad++; break; }
+        bad += num(b) != n;
+        store_pop(&st);
+    }
+    CHECK(bad == 0 && store_count(&st) == 0, "a half-written item after a power cut is skipped (%d wrong)", bad);
+
+    // the rule for a filling outbox: older data kept, new data thinned
+    int kept_motion = 0, kept_gsr = 0;
+    for (int t = 0; t < 100; t++) kept_motion += store_should_keep(0.5f, false, true, t);
+    CHECK(kept_motion == 100, "below 90%%: every motion summary (%d/100)", kept_motion);
+    kept_motion = 0;
+    for (int t = 0; t < 100; t++) kept_motion += store_should_keep(0.92f, false, true, t), kept_gsr += store_should_keep(0.92f, false, false, t);
+    CHECK(kept_motion == 10 && kept_gsr == 100, "from 90%%: motion every 10 s (%d/100), GSR all (%d/100)", kept_motion, kept_gsr);
+    CHECK(!store_should_keep(0.99f, false, false, 0) && !store_should_keep(0.99f, false, true, 0), "from 98%%: no GSR or motion");
+    CHECK(store_should_keep(0.99f, true, false, 3) && store_should_keep(1.0f, true, false, 3), "scratch episodes always");
+}
+
 int main(void) {
     srand(1);
     test_scratch();
     test_skin();
     test_ui_flow();
+    test_store();
     test_touch();
     test_sm();
     printf(failures ? "%d FAILED\n" : "all passed\n", failures);

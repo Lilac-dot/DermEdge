@@ -1,0 +1,8 @@
+# The band's flash: the app (1.5 MB, about 0.7 MB used) and the outbox of readings waiting for
+# the phone (2.4 MB, about 20 h offline; main/store.c). nvs keeps its offset, so Bluetooth bonds
+# and the GSR calibration survive the change.
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x6000,
+phy_init, data, phy,     0xf000,   0x1000,
+factory,  app,  factory, 0x10000,  0x180000,
+outbox,   data, 0x40,    0x190000, 0x270000,

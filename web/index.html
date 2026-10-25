@@ -9,7 +9,7 @@
 <script src="/static/chart.umd.min.js"></script>
 <!-- Browser version: the models run on this device (js/engine.mjs) and js/local-api.js answers the
      dashboard's /api calls locally, so no server is involved. -->
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
 <script src="/js/wearable-core.js"></script>
 <script src="/js/local-api.js"></script>
 <style>
@@ -79,6 +79,9 @@
   .badge { position: absolute; top: 12px; left: 12px; padding: 7px 14px; border-radius: 999px; font-weight: 700;
            font-size: 16px; letter-spacing: .02em; background: rgba(30, 12, 20, .72); color: #fff; }
   .badge.rash { background: var(--bad); } .badge.normal { background: var(--ok); } .badge.warn { background: var(--warn); }
+  .cam-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             gap: 10px; padding: 20px; text-align: center; color: #fff; }
+  .cam-off p { margin: 0; max-width: 34ch; font-size: 14px; opacity: .85; }
 
   .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
   .btn { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 9px 16px;
@@ -255,11 +258,16 @@
           <video id="video" autoplay playsinline muted></video>
           <div class="box"></div>
           <div class="scan" id="scan" hidden></div>
-          <div class="badge" id="badge">Starting camera…</div>
+          <div class="badge" id="badge" hidden>Camera off</div>
+          <div class="cam-off" id="camOff">
+            <button class="btn primary" id="camStart">Turn on camera</button>
+            <p>The camera only runs while you use it here, and frames never leave this device.</p>
+          </div>
         </div>
         <div class="controls">
           <button class="btn primary" id="analyzeBtn">Analyse now</button>
           <label class="btn" for="upload">Upload photo</label>
+          <button class="btn" id="camStop" hidden>Turn off camera</button>
           <input type="file" id="upload" accept="image/*" hidden>
           <label class="toggle"><input type="checkbox" id="auto" checked> Auto-analyse when a rash is held in view</label>
         </div>
@@ -473,6 +481,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "report") loadFairness();
   if (b.dataset.tab === "triggers") { loadState(); loadTreatments(); }
   if (b.dataset.tab !== "about") $("wipeConfirm").hidden = true;
+  if (b.dataset.tab !== "check") stopCamera();
 });
 document.querySelectorAll("[data-goto]").forEach(a => a.onclick = e => {
   e.preventDefault(); document.querySelector(`nav button[data-tab="${a.dataset.goto}"]`).click();
@@ -480,16 +489,31 @@ document.querySelectorAll("[data-goto]").forEach(a => a.onclick = e => {
 
 // camera
 const video = $("video");
+// The camera never starts on its own: only from "Turn on camera", and it stops when the user
+// turns it off or leaves the Check tab, so the browser's camera light means someone asked for it.
 async function startCamera() {
+  $("camStart").disabled = true;
   try {
     video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
-    $("badge").textContent = "Looking…";
+    $("camOff").hidden = true; $("camStop").hidden = false;
+    const b = $("badge"); b.hidden = false; b.className = "badge"; b.textContent = "Looking…";
+    $("camNote").textContent = "Hold the skin inside the white box, 10–15 cm away.";
     loop();
   } catch (e) {
-    $("badge").textContent = "No camera";
     $("camNote").textContent = "Camera blocked or missing: allow it in the browser, or use Upload photo.";
   }
+  $("camStart").disabled = false;
 }
+
+function stopCamera() {
+  if (!video.srcObject) return;
+  video.srcObject.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  $("badge").hidden = true; $("camOff").hidden = false; $("camStop").hidden = true;
+  rashStreak = 0;
+}
+$("camStart").onclick = startCamera;
+$("camStop").onclick = stopCamera;
 
 function crop(size) {
   // the square under the on-screen box, un-mirrored. The box is 45% of the 4:3 frame's width,
@@ -507,8 +531,11 @@ async function post(url, blob) {
   return r.json();
 }
 
+let looping = false;
 async function loop() {
-  while (true) {
+  if (looping) return;
+  looping = true;
+  while (video.srcObject) {
     if (video.videoWidth && !busy) {
       try {
         const s = await post("/api/screen", await crop(320));
@@ -522,10 +549,11 @@ async function loop() {
     }
     await new Promise(r => setTimeout(r, 800));  // CLIP in the browser takes a few hundred ms a frame
   }
+  looping = false;
 }
 
 async function analyseCamera() {
-  if (!video.videoWidth) return;
+  if (!video.videoWidth) { $("camNote").textContent = "Turn on the camera first, or use Upload photo."; return; }
   analyse(await crop(448), "webcam");
 }
 
@@ -845,7 +873,6 @@ function applyPreferredSite() {
   if (!prefs.onboarded) { obStep = 0; obRender(); $("onboard").hidden = false; }
   loadTreatments();
 })();
-startCamera();
 </script>
 </body>
 </html>

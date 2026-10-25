@@ -1,6 +1,7 @@
 // Framebuffer and drawing, plain C: st7735.c sends it to the panel, test/preview.c to a PNG.
 #include "display.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "font5x7.h"
@@ -169,4 +170,22 @@ int disp_ftext_wrapped(const font_t *f, int x, int y, int w, int gap, const char
         s += fit;
     }
     return y;
+}
+
+void disp_mask(const mask_t *m, int x, int y, uint16_t c) {
+    for (int i = 0; i < m->w * m->h; i++) {
+        int a = i % 2 ? m->bits[i / 2] & 15 : m->bits[i / 2] >> 4;
+        blend(x + i % m->w, y + i / m->w, c, a);
+    }
+}
+
+void disp_ring(int cx, int cy, int r_out, int r_in, float frac, uint16_t fg, uint16_t bg) {
+    for (int j = -r_out; j <= r_out; j++)
+        for (int i = -r_out; i <= r_out; i++) {
+            int d2 = i * i + j * j;
+            if (d2 > r_out * r_out + r_out || d2 < r_in * r_in - r_in) continue;
+            float a = atan2f((float)i, (float)-j);  // 0 at 12 o'clock, clockwise
+            if (a < 0) a += 2 * 3.14159265f;
+            disp_pixel(cx + i, cy + j, a <= frac * 2 * 3.14159265f ? fg : bg);
+        }
 }

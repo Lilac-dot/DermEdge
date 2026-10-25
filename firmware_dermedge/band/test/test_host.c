@@ -7,6 +7,7 @@
 #include "../main/scratch.h"
 #include "../main/skin.h"
 #include "../main/touch.h"
+#include "../main/ui_flow.h"
 
 static int failures;
 #define CHECK(cond, ...)                                    \
@@ -239,10 +240,70 @@ static void test_sm(void) {
     CHECK(fx & FX_START_REC && sm.state == ST_RECORDING, "can record offline from pairing");
 }
 
+// --- screens and warnings ---------------------------------------------------------------
+static void test_ui_flow(void) {
+    puts("screens and warnings");
+    ui_flow_t f;
+    ui_flow_init(&f);
+    ui_inputs_t in = {.state = ST_BOOT, .outbox_cap = 3600, .gsr = SENSOR_ABSENT, .temp = SENSOR_ABSENT};
+    CHECK(ui_flow_screen(&f, &in) == SCR_BOOT, "boot");
+    in.state = ST_PAIRING, in.now_ms = 1000;
+    CHECK(ui_flow_screen(&f, &in) == SCR_CONNECT, "pairing shows Connect");
+    in.state = ST_READY, in.linked = true;
+    CHECK(ui_flow_screen(&f, &in) == SCR_HOME, "ready shows Home");
+    in.held_ms = 100;
+    CHECK(ui_flow_screen(&f, &in) == SCR_HOME, "a tap-length touch doesn't flash the hold screen");
+    in.held_ms = 900;
+    CHECK(ui_flow_screen(&f, &in) == SCR_HOLD_START, "holding shows Hold to start");
+    CHECK(ui_flow_hold_progress(&in) > 0.4f && ui_flow_hold_progress(&in) < 0.5f, "the ring is under half full at 0.9 s");
+    in.held_ms = 0;
+    CHECK(ui_flow_screen(&f, &in) == SCR_HOME, "letting go early goes back to Home");
+
+    in.state = ST_RECORDING, in.now_ms = 5000, in.gsr = SENSOR_OK;
+    CHECK(ui_flow_screen(&f, &in) == SCR_STARTED, "a new recording shows Started");
+    in.now_ms = 5000 + UI_STARTED_MS + 1;
+    CHECK(ui_flow_screen(&f, &in) == SCR_RECORDING, "then Recording");
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "no warning while all is well");
+    in.page = 1;
+    CHECK(ui_flow_screen(&f, &in) == SCR_SENSORS, "a tap shows Sensors");
+    in.page = 0;
+    in.held_ms = 1200;
+    CHECK(ui_flow_screen(&f, &in) == SCR_HOLD_STOP, "holding while recording shows Hold to stop");
+    in.held_ms = 0;
+
+    // the skin sensor comes off: a warning only after 10 s
+    in.gsr = SENSOR_IDLE, in.now_ms = 20000;
+    ui_flow_screen(&f, &in);
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "no warning in the first seconds off the skin");
+    in.now_ms = 20000 + UI_SENSOR_GRACE_MS;
+    ui_flow_screen(&f, &in);
+    CHECK(ui_flow_warning(&f, &in) == WARN_GSR_OFF, "skin sensor warning after 10 s");
+    in.gsr = SENSOR_OK, in.now_ms += 100;
+    ui_flow_screen(&f, &in);
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "back on the skin clears it");
+    in.temp = SENSOR_ABSENT;
+    ui_flow_screen(&f, &in);
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "a temperature sensor that never worked never warns");
+    in.linked = false;
+    CHECK(ui_flow_warning(&f, &in) == WARN_OFFLINE, "recording while not connected warns");
+    in.outbox = 3000;
+    CHECK(ui_flow_warning(&f, &in) == WARN_STORAGE, "memory nearly full outranks everything");
+    in.outbox = 0, in.linked = true;
+
+    in.state = ST_SYNCING, in.now_ms = 60000;
+    CHECK(ui_flow_screen(&f, &in) == SCR_SAVED, "stopping shows Saved");
+    in.now_ms = 60000 + UI_SAVED_MS + 1;
+    CHECK(ui_flow_screen(&f, &in) == SCR_SYNCING, "then Syncing");
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "skin warnings are for recordings only");
+    in.state = ST_ERROR;
+    CHECK(ui_flow_screen(&f, &in) == SCR_SENSOR_ERROR, "no accelerometer: the error screen");
+}
+
 int main(void) {
     srand(1);
     test_scratch();
     test_skin();
+    test_ui_flow();
     test_touch();
     test_sm();
     printf(failures ? "%d FAILED\n" : "all passed\n", failures);

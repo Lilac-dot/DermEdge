@@ -25,69 +25,57 @@ static void save(const char *dir, const char *name) {
     fclose(f);
 }
 
+static sm_t sm;
+static ui_model_t m;
+
+// Draws `screen` (with an optional warning) in device state `state`, and saves it as `name`
+static void shot(const char *dir, const char *name, sm_state_t state, ui_screen_t screen, ui_warning_t warn) {
+    sm.state = state;
+    m.preview_screen = screen + 1;
+    m.preview_warning = warn + 1;
+    ui_render(&m);
+    save(dir, name);
+}
+
 int main(int argc, char **argv) {
     const char *dir = argc > 1 ? argv[1] : ".";
-    sm_t sm = {0};
-    ui_model_t m = {.sm = &sm, .now_ms = 0};
+    m = (ui_model_t){.sm = &sm, .outbox_cap = 3600, .gsr_state = SENSOR_OK, .temp_state = SENSOR_OK};
 
-    sm.state = ST_BOOT;
-    ui_render(&m);
-    save(dir, "1_boot");
-
-    sm.state = ST_PAIRING;
-    ui_render(&m);
-    save(dir, "2_pairing");
+    shot(dir, "01_boot", ST_BOOT, SCR_BOOT, WARN_NONE);
+    shot(dir, "02_connect", ST_PAIRING, SCR_CONNECT, WARN_NONE);
     sm.passkey = 482913;
-    ui_render(&m);
-    save(dir, "3_pairing_code");
-
+    shot(dir, "03_pairing_code", ST_PAIRING, SCR_CONNECT, WARN_NONE);
     sm.passkey = 0;
     sm.linked = true;
-    sm.state = ST_READY;
-    m.has_last = true;
-    m.last_minutes = 42;
-    m.last_scratches = 3;
-    m.held_ms = 1200;
-    ui_render(&m);
-    save(dir, "4_ready_holding");
-
+    m.has_last = true, m.last_minutes = 42, m.last_scratches = 3;
+    shot(dir, "04_home", ST_READY, SCR_HOME, WARN_NONE);
+    m.held_ms = 1300;
+    shot(dir, "05_hold_to_start", ST_READY, SCR_HOLD_START, WARN_NONE);
     m.held_ms = 0;
-    sm.state = ST_RECORDING;
-    sm.source = SRC_TOUCH;
-    m.elapsed_s = 754;
-    m.activity = 0.31f;
-    m.freq_hz = 5.2f;
+    shot(dir, "06_started", ST_RECORDING, SCR_STARTED, WARN_NONE);
+    m.elapsed_s = 754, m.scratches = 2, m.now_ms = 0;
+    shot(dir, "07_recording", ST_RECORDING, SCR_RECORDING, WARN_NONE);
     m.scratchy = true;
-    m.scratches = 2;
-    sm.outbox = 14;
-    ui_render(&m);
-    save(dir, "5_recording");
-    sm.page = 1;
-    m.gsr_ok = m.temp_ok = true;
-    m.gsr_us = 1.84f;
-    m.skin_c = 32.4f;
-    m.skin_sim = 1;
-    ui_render(&m);
-    save(dir, "6_recording_detail");
-    m.skin_sim = 0;
-
-    sm.page = 0;
-    sm.state = ST_SYNCING;
-    sm.outbox = 37;
-    m.now_ms = 300;
-    ui_render(&m);
-    save(dir, "7_syncing");
-
-    sm.state = ST_ERROR;
-    ui_render(&m);
-    save(dir, "8_error");
-
-    sm.state = ST_READY;
-    sm.alert = true;
+    shot(dir, "08_recording_scratching", ST_RECORDING, SCR_RECORDING, WARN_NONE);
+    m.scratchy = false, m.gsr_state = SENSOR_IDLE;
+    shot(dir, "09_warning_skin_sensor", ST_RECORDING, SCR_RECORDING, WARN_GSR_OFF);
+    m.gsr_state = SENSOR_OK, sm.linked = false;
+    shot(dir, "10_warning_offline", ST_RECORDING, SCR_RECORDING, WARN_OFFLINE);
+    sm.outbox = 3100;
+    shot(dir, "11_warning_memory", ST_RECORDING, SCR_RECORDING, WARN_STORAGE);
+    sm.outbox = 412, sm.linked = true, m.temp_state = SENSOR_ABSENT;
+    shot(dir, "12_sensors", ST_RECORDING, SCR_SENSORS, WARN_NONE);
+    m.held_ms = 700;
+    shot(dir, "13_hold_to_stop", ST_RECORDING, SCR_HOLD_STOP, WARN_NONE);
+    m.held_ms = 0, m.last_minutes = 13, m.last_scratches = 2;
+    shot(dir, "14_saved", ST_SYNCING, SCR_SAVED, WARN_NONE);
+    sm.outbox = 37, m.now_ms = 300;
+    shot(dir, "15_syncing", ST_SYNCING, SCR_SYNCING, WARN_NONE);
+    shot(dir, "16_sensor_error", ST_ERROR, SCR_SENSOR_ERROR, WARN_NONE);
+    sm.outbox = 0, sm.alert = true;
     strcpy(m.alert_level, "high");
-    strcpy(m.alert_reason, "Night scratching and stress are both up.");
-    strcpy(m.alert_tip, "Take a 5-minute breathing break and keep nails short.");
-    ui_render(&m);
-    save(dir, "9_alert");
+    strcpy(m.alert_reason, "Scratching and stress are both up.");
+    strcpy(m.alert_tip, "Try a cool compress, and a 5-minute breathing break.");
+    shot(dir, "17_flare_alert", ST_READY, SCR_HOME, WARN_NONE);
     return 0;
 }

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "art.h"
 #include "fonts.h"
 
 #define DISP_W 160
@@ -37,3 +38,8 @@ int disp_ftext_width(const font_t *f, const char *s);
 void disp_ftext_centered(const font_t *f, int cx, int y, const char *s, uint16_t c);
 // Word-wraps into a box `w` wide, `gap` extra pixels between lines; returns the y below
 int disp_ftext_wrapped(const font_t *f, int x, int y, int w, int gap, const char *s, uint16_t c);
+
+// An anti-aliased 4-bit mask (art.h) in colour c, blended like text
+void disp_mask(const mask_t *m, int x, int y, uint16_t c);
+// A ring around (cx, cy), filled clockwise from 12 o'clock for `frac` (0..1) in fg, rest in bg
+void disp_ring(int cx, int cy, int r_out, int r_in, float frac, uint16_t fg, uint16_t bg);

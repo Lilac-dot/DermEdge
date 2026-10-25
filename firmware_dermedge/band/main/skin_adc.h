@@ -13,7 +13,9 @@
 
 typedef struct {
     float us, c;            // microsiemens, degrees C
-    bool gsr_ok, temp_ok;   // on skin / plugged in
+    bool gsr_ok, temp_ok;   // on skin / plugged in, and readings worth sending
+    bool gsr_connected;     // a module is driving the pin (it may be off the skin)
+    bool temp_settling;     // a reading in range that isn't steady for 3 s yet
     bool sim;               // simulated ("sim on"), not the sensors
     float gsr_mv, temp_mv;  // what the pins read, for "skin on"
 } skin_reading_t;

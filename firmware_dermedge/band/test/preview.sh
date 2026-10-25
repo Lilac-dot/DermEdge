@@ -7,14 +7,14 @@ SYSROOT=
 for sdk in /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk /Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk; do
     [ -d "$sdk" ] && SYSROOT="-isysroot $sdk" && break
 done
-cc $SYSROOT -std=c11 -Wall -Werror -o "$OUT/preview" preview.c ../main/ui.c ../main/display.c ../main/fonts.c -lm
+cc $SYSROOT -std=c11 -Wall -Werror -o "$OUT/preview" preview.c ../main/ui.c ../main/ui_flow.c ../main/display.c ../main/fonts.c ../main/art.c -lm
 "$OUT/preview" "$OUT"
 python3 - "$OUT" <<'PY'
 import sys
 from pathlib import Path
 from PIL import Image, ImageDraw
 files = sorted(Path(sys.argv[1]).glob("*.ppm"))
-S, cols = 3, 3
+S, cols = 3, 4
 w, h = 160 * S, 128 * S
 sheet = Image.new("RGB", (cols * (w + 16) + 16, ((len(files) + cols - 1) // cols) * (h + 40) + 16), "white")
 d = ImageDraw.Draw(sheet)

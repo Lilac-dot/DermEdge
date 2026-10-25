@@ -3,38 +3,32 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "art.h"
 #include "display.h"
 #include "fonts.h"
 #include "touch.h"
 
-// The website's palette (web/index.html, light theme), pushed much deeper for the ST7735: its pale
-// pastels (petal #F9DDD8, card #FFFAF9, sage #A7B59E) wash out to white on this panel.
-#define C_BG RGB(0xD8, 0x4A, 0x78)     // rose pink
-#define C_CARD RGB(0xF6, 0xB3, 0xC6)   // pink card
-#define C_SAGE RGB(0x5E, 0x8F, 0x48)   // sage
-#define C_DEEP RGB(0x1F, 0x55, 0x1A)   // deep green, for titles and icons
-#define C_BERRY RGB(0xB0, 0x1E, 0x55)  // berry
-#define C_TRACK RGB(0xFC, 0xDE, 0xE7)  // light blush: empty bars, the alert card
-#define C_TEXT RGB(0x1E, 0x12, 0x16)   // near black
-#define C_MUTED RGB(0x5A, 0x2A, 0x38)  // plum
-#define C_BAD RGB(0xA8, 0x10, 0x30)    // deep red
-#define C_OK RGB(0x16, 0x6E, 0x40)     // green
+// The website's teal theme (web/index.html, light). Its pale tints wash out on this panel, so
+// pale ones are a step deeper: --accent-soft #dcefec becomes C_SOFT.
+#define C_BG RGB(0x0F, 0x7C, 0x74)     // --accent, teal: the screen behind the cards
+#define C_DEEP RGB(0x13, 0x4E, 0x4A)   // --deep: the header
+#define C_CARD RGB(0xFF, 0xFF, 0xFF)   // --card
+#define C_TEAL RGB(0x0F, 0x7C, 0x74)   // titles on cards
+#define C_SOFT RGB(0xC4, 0xE2, 0xDD)   // tracks, the logo's circle
+#define C_TEXT RGB(0x1D, 0x2B, 0x2A)   // --text
+#define C_MUTED RGB(0x5C, 0x6F, 0x6C)  // --muted
+#define C_OK RGB(0x3A, 0x7D, 0x1F)     // --ok, green
+#define C_WARN RGB(0xC5, 0x6A, 0x1A)   // --warn
+#define C_BAD RGB(0xC9, 0x2F, 0x4C)    // --bad
 #define C_WHITE RGB(0xFF, 0xFF, 0xFF)
 
 // Pixel art: '#' first colour, '+' second, anything else transparent
-static const char *LEAF[] = {
-    "........###.", "......####+.", "....#####+#.", "...####+###.", "..####+###..", "..###+####..",
-    ".###+####...", ".##+####....", ".#+###......", "..+.........", ".+..........", "+...........",
-};
 static const char *BLUETOOTH[] = {
     "...#...", "...##..", "#..#.#.", ".#.#..#", "..##.#.", "...##..",
     "..##.#.", ".#.#..#", "#..#.#.", "...##..", "...#...",
 };
 static const char *FLOWER[] = {
     "..++.++..", ".+++++++.", "+++###+++", ".++###++.", "+++###+++", ".+++++++.", "..++.++..", "....#....", "...##....",
-};
-static const char *SPROUT[] = {
-    "##.....##", "###...###", ".###.###.", "..##+##..", "....+....", "....+....", "..+++++..", ".+++++++.",
 };
 static const char *SYNC[] = {
     "..#......", ".##......", "#########", ".##......", "..#......",
@@ -43,11 +37,12 @@ static const char *SYNC[] = {
 static const char *WARN[] = {
     "....#....", "...#+#...", "...#+#...", "..##+##..", "..##+##..", ".#######.", ".###+###.", "#########",
 };
-static const char *PULSE[] = {
-    "....#......", "...#.#.....", "...#.#.....", "##.#...#.##", "..#....#.#.", "..#.....#..", "........#..",
-};
 static const char *CLAW[] = {"#..#..#..", "#..#..#..", ".#..#..#.", ".#..#..#.", "..#..#..#", "..#..#..#"};
-static const char *BLOSSOM[] = {".+.", "+#+", ".+."};  // tiny white flower for the header
+static const char *CHECK[] = {"........##", ".......##.", "......##..", "##...##...", ".##.##....", "..###.....", "...#......"};
+static const char *HAND[] = {  // a fingertip on the pad
+    "...##....", "...##....", "...##....", "...#####.", "...######", "#..######", "##.######", ".########",
+    "..######.", "..######.", "...####..",
+};
 
 #define ROWS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #define ICON(x, y, art, scale, c1, c2) icon(x, y, art, ROWS(art), scale, c1, c2)
@@ -60,177 +55,250 @@ static void icon(int x, int y, const char **rows, int n, int scale, uint16_t c1,
         }
 }
 
+static void logo(const mask_t *circle, const mask_t *drop, const mask_t *shine, int x, int y, uint16_t circle_c) {
+    disp_mask(circle, x, y, circle_c);
+    disp_mask(drop, x, y, C_TEAL);
+    disp_mask(shine, x, y, C_WHITE);
+}
+
 #define CARD_X 6
 #define CARD_Y 22
 #define CARD_W 148
-#define CARD_H 100
-#define IN_X (CARD_X + 8)
-#define IN_W (CARD_W - 16)
-#define IN_R (CARD_X + CARD_W - 8)  // right edge of the content
-#define CARD_B (CARD_Y + CARD_H)
+#define IN_X (CARD_X + 9)
+#define IN_W (CARD_W - 18)
+#define IN_R (CARD_X + CARD_W - 9)
+#define FULL_B 122  // card bottom without a warning
+#define WARN_Y 107  // the warning strip
+
+static int card_b;  // this frame's card bottom
 
 static void header(const ui_model_t *m) {
-    ICON(5, 4, LEAF, 1, C_DEEP, C_WHITE);
-    int x = disp_ftext(&font_label, 20, 3, "DermEdge", C_WHITE);
-    for (int i = 0; i < 3; i++) ICON(x + 6 + i * 9, 7 + (i % 2) * 3, BLOSSOM, 1, C_DEEP, C_WHITE);
-    ICON(148, 4, BLUETOOTH, 1, m->sm->linked ? C_WHITE : C_CARD, 0);
+    disp_rect(0, 0, DISP_W, 18, C_DEEP);
+    logo(&logo_sm_circle, &logo_sm_drop, &logo_sm_shine, 4, 2, C_SOFT);
+    disp_ftext(&font_label, 22, 3, "DermEdge", C_WHITE);
     if (m->skin_sim) {  // never let simulated skin readings pass for real ones
         disp_round_rect(84, 3, 26, 13, 4, C_WHITE);
         disp_ftext(&font_label, 87, 3, "SIM", C_BAD);
     }
     if (m->sm->state == ST_RECORDING && (m->now_ms / 500) % 2 == 0) {  // blinking REC
-        disp_circle(117, 10, 3, C_WHITE);
+        disp_circle(117, 10, 3, C_BAD);
         disp_ftext(&font_label, 123, 3, "REC", C_WHITE);
     }
+    ICON(148, 4, BLUETOOTH, 1, m->sm->linked ? C_WHITE : C_SOFT, 0);
 }
 
-// The card with a title in Young Serif and a pixel icon on the right
-static void card(const char *title, uint16_t title_c, const char **art, int rows, uint16_t c1, uint16_t c2) {
-    disp_round_rect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, C_CARD);
-    if (title) disp_ftext(&font_title, IN_X, CARD_Y + 3, title, title_c);
-    if (art) icon(IN_R - (int)strlen(art[0]) * 2, CARD_Y + 8, art, rows, 2, c1, c2);
+static void card(void) {
+    disp_round_rect(CARD_X, CARD_Y, CARD_W, card_b - CARD_Y, 8, C_CARD);
 }
 
-// "Hold 2 s" bar along the bottom of the card while the pad is held
-static void hold_bar(const ui_model_t *m) {
-    if (!m->held_ms) return;
-    int w = IN_W * (int)(m->held_ms > TOUCH_LONG_MS ? TOUCH_LONG_MS : m->held_ms) / TOUCH_LONG_MS;
-    disp_round_rect(IN_X, CARD_B - 9, IN_W, 5, 2, C_TRACK);
-    if (w > 4) disp_round_rect(IN_X, CARD_B - 9, w, 5, 2, C_DEEP);
+static void title(const char *s, uint16_t c) {
+    disp_ftext(&font_title, IN_X, CARD_Y + 3, s, c);
 }
 
-static void claw_line(int y, uint32_t n, uint16_t c) {
-    char buf[32];
-    ICON(IN_X, y + 3, CLAW, 1, C_BAD, 0);
-    snprintf(buf, sizeof(buf), "%lu scratch episode%s", (unsigned long)n, n == 1 ? "" : "s");
-    disp_ftext(&font_body, IN_X + 14, y, buf, c);
+// a coloured dot and a line of text: one status line
+static void status_line(int y, bool good, const char *text) {
+    disp_circle(IN_X + 3, y + 7, 3, good ? C_OK : C_SOFT);
+    disp_ftext(&font_body, IN_X + 12, y, text, good ? C_TEXT : C_MUTED);
 }
 
-// "label ........ value" on one line
+// "label ........ value" in plain words
 static void row(int y, const char *label, const char *value, uint16_t vc) {
     disp_ftext(&font_body, IN_X, y, label, C_MUTED);
     disp_ftext(&font_body, IN_R - disp_ftext_width(&font_body, value), y, value, vc);
 }
 
-static void screen_boot(void) {
-    ICON(56, 18, LEAF, 4, C_DEEP, C_WHITE);
-    disp_ftext_centered(&font_title, DISP_W / 2, 72, "DermEdge", C_WHITE);
-    disp_ftext_centered(&font_label, DISP_W / 2, 102, "starting...", C_CARD);
+static void footer(const char *s, uint16_t c) {
+    disp_ftext(&font_label, IN_X, card_b - 15, s, c);
 }
 
-static void screen_pairing(const ui_model_t *m) {
-    card("Connect", C_DEEP, BLUETOOTH, ROWS(BLUETOOTH), C_DEEP, 0);
+static const char *plural(uint32_t n) { return n == 1 ? "" : "s"; }
+
+// --- screens -----------------------------------------------------------------------------
+static void screen_boot(void) {
+    disp_fill(C_BG);
+    logo(&logo_lg_circle, &logo_lg_drop, &logo_lg_shine, (DISP_W - 56) / 2, 12, C_SOFT);
+    disp_ftext_centered(&font_title, DISP_W / 2, 72, "DermEdge", C_WHITE);
+    disp_ftext_centered(&font_label, DISP_W / 2, 100, "starting...", C_SOFT);
+}
+
+static void screen_connect(const ui_model_t *m) {
+    card();
+    title("Connect", C_TEAL);
+    ICON(IN_R - 14, CARD_Y + 8, BLUETOOTH, 2, C_TEAL, 0);
     char buf[40];
     if (m->sm->passkey) {
-        snprintf(buf, sizeof(buf), "%03lu %03lu", (unsigned long)m->sm->passkey / 1000,
-                 (unsigned long)m->sm->passkey % 1000);
+        snprintf(buf, sizeof(buf), "%03lu %03lu", (unsigned long)m->sm->passkey / 1000, (unsigned long)m->sm->passkey % 1000);
         disp_ftext(&font_label, IN_X, CARD_Y + 31, "Pairing code", C_MUTED);
         disp_ftext_centered(&font_big, DISP_W / 2, CARD_Y + 38, buf, C_TEXT);
-        disp_ftext_centered(&font_body, DISP_W / 2, CARD_Y + 76, "Type it on your laptop", C_MUTED);
-    } else {
-        int y = disp_ftext_wrapped(&font_body, IN_X, CARD_Y + 32, IN_W, 0,
-                                   "Open DermEdge in Chrome and tap Connect band", C_TEXT);
-        if (m->sm->outbox) {
-            snprintf(buf, sizeof(buf), "%lu readings to sync", (unsigned long)m->sm->outbox);
-            disp_ftext(&font_label, IN_X, y + 2, buf, C_DEEP);
-        }
-        disp_ftext(&font_label, IN_X, CARD_B - 24, "Hold 2 s to record offline", C_MUTED);
+        disp_ftext_centered(&font_body, DISP_W / 2, CARD_Y + 76, "Type it on your phone", C_MUTED);
+        return;
     }
-    hold_bar(m);
+    int y = disp_ftext_wrapped(&font_body, IN_X, CARD_Y + 32, IN_W, 0, "Open DermEdge and tap Connect band", C_TEXT);
+    if (m->sm->outbox) {
+        snprintf(buf, sizeof(buf), "%lu readings to sync", (unsigned long)m->sm->outbox);
+        disp_ftext(&font_label, IN_X, y + 2, buf, C_TEAL);
+    }
+    footer("Hold the pad to record", C_MUTED);
 }
 
-static void screen_ready(const ui_model_t *m) {
-    card("Ready", C_DEEP, SPROUT, ROWS(SPROUT), C_SAGE, C_WHITE);
-    disp_ftext_wrapped(&font_body, IN_X, CARD_Y + 32, IN_W, 0, "Hold the pad 2 s to start recording", C_TEXT);
-    if (m->has_last) {
+static void screen_home(const ui_model_t *m) {
+    card();
+    logo(&logo_md_circle, &logo_md_drop, &logo_md_shine, IN_X - 2, CARD_Y + 5, C_SOFT);
+    disp_ftext(&font_title, IN_X + 34, CARD_Y + 8, "Ready", C_TEAL);
+    status_line(CARD_Y + 40, m->sm->linked, m->sm->linked ? "Phone connected" : "Phone not connected");
+    status_line(CARD_Y + 54, m->gsr_state == SENSOR_OK,
+                m->gsr_state == SENSOR_OK ? "Skin sensor on" : m->gsr_state == SENSOR_IDLE ? "Skin sensor off skin" : "No skin sensor");
+    if (m->has_last && card_b == FULL_B) {
         char buf[40];
-        snprintf(buf, sizeof(buf), "Last session, %.0f min", m->last_minutes);
-        disp_ftext(&font_label, IN_X, CARD_Y + 64, buf, C_MUTED);
-        claw_line(CARD_Y + 76, m->last_scratches, C_TEXT);
+        snprintf(buf, sizeof(buf), "Last: %.0f min, %lu scratch%s", m->last_minutes, (unsigned long)m->last_scratches,
+                 m->last_scratches == 1 ? "" : "es");
+        disp_ftext(&font_label, IN_X, CARD_Y + 70, buf, C_MUTED);
     }
-    hold_bar(m);
+    ICON(IN_X, card_b - 17, HAND, 1, C_TEAL, 0);
+    disp_ftext(&font_label, IN_X + 13, card_b - 15, "Hold the pad to start", C_TEAL);
+}
+
+static void screen_hold(const ui_model_t *m, bool stop) {
+    card();
+    int cy = CARD_Y + 34;
+    disp_ring(DISP_W / 2, cy, 23, 17, ui_flow_hold_progress(&(ui_inputs_t){.held_ms = m->held_ms}), stop ? C_BAD : C_TEAL, C_SOFT);
+    ICON(DISP_W / 2 - 4, cy - 6, HAND, 1, stop ? C_BAD : C_TEAL, 0);
+    disp_ftext_centered(&font_body, DISP_W / 2, CARD_Y + 61, stop ? "Keep holding to stop" : "Keep holding to start", C_TEXT);
+    disp_ftext_centered(&font_label, DISP_W / 2, CARD_Y + 76, "Let go to cancel", C_MUTED);
+}
+
+static void screen_started(void) {
+    card();
+    disp_circle(DISP_W / 2, CARD_Y + 30, 17, C_OK);
+    ICON(DISP_W / 2 - 10, CARD_Y + 23, CHECK, 2, C_WHITE, 0);
+    disp_ftext_centered(&font_title, DISP_W / 2, CARD_Y + 52, "Recording", C_TEAL);
+    disp_ftext_centered(&font_label, DISP_W / 2, CARD_Y + 78, "Hold the pad again to stop", C_MUTED);
 }
 
 static void screen_recording(const ui_model_t *m) {
-    disp_round_rect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, C_CARD);
-    static const char *dots[] = {"", ".", "..", "..."};
+    card();
     char buf[40];
-    snprintf(buf, sizeof(buf), "Collecting data%s", dots[(m->now_ms / 400) % 4]);
-    disp_ftext(&font_label, IN_X, CARD_Y + 5, buf, C_DEEP);
-    ICON(IN_R - 22, CARD_Y + 6, PULSE, 2, m->scratchy ? C_BAD : C_SAGE, 0);
-    if (m->sm->page == 0) {
-        unsigned s = (unsigned)m->elapsed_s;
-        snprintf(buf, sizeof(buf), "%02u:%02u", s / 60 % 100, s % 60);
-        disp_ftext_centered(&font_big, DISP_W / 2, CARD_Y + 14, buf, C_TEXT);
-        // movement bar: sage when calm, red while it looks like scratching
-        disp_ftext(&font_label, IN_X, CARD_Y + 49, m->scratchy ? "Scratching?" : "Movement", m->scratchy ? C_BAD : C_MUTED);
-        disp_round_rect(IN_X, CARD_Y + 62, IN_W, 8, 3, C_TRACK);
-        float level = m->activity / 0.6f;
-        int w = (int)(IN_W * (level > 1 ? 1 : level));
-        if (w > 6) disp_round_rect(IN_X, CARD_Y + 62, w, 8, 3, m->scratchy ? C_BAD : C_SAGE);
-        claw_line(CARD_Y + 76, m->scratches, C_TEXT);
-    } else {  // detail page: six rows, 12 px apart
-        snprintf(buf, sizeof(buf), "%.1f Hz", m->freq_hz);
-        row(CARD_Y + 18, "Stroke rate", buf, C_TEXT);
-        snprintf(buf, sizeof(buf), "%.3f g", m->activity);
-        row(CARD_Y + 30, "Movement", buf, C_TEXT);
-        if (m->gsr_ok) snprintf(buf, sizeof(buf), "%.2f uS", m->gsr_us);
-        row(CARD_Y + 42, "GSR", m->gsr_ok ? buf : "not on skin", m->gsr_ok ? C_TEXT : C_MUTED);
-        if (m->temp_ok) snprintf(buf, sizeof(buf), "%.1f C", m->skin_c);
-        row(CARD_Y + 54, "Skin temp", m->temp_ok ? buf : "no sensor", m->temp_ok ? C_TEXT : C_MUTED);
-        snprintf(buf, sizeof(buf), "%lu", (unsigned long)m->sm->outbox);
-        row(CARD_Y + 66, "Waiting to send", buf, C_TEXT);
-        row(CARD_Y + 78, "Laptop", m->sm->linked ? "connected" : "offline", m->sm->linked ? C_OK : C_MUTED);
+    disp_circle(IN_X + 3, CARD_Y + 10, 3, C_BAD);
+    disp_ftext(&font_label, IN_X + 11, CARD_Y + 4, "Recording", C_TEAL);
+    unsigned s = (unsigned)m->elapsed_s;
+    snprintf(buf, sizeof(buf), "%02u:%02u", s / 60 % 100, s % 60);
+    disp_ftext_centered(&font_big, DISP_W / 2, CARD_Y + 13, buf, C_TEXT);
+    ICON(IN_X, CARD_Y + 53, CLAW, 1, C_BAD, 0);
+    snprintf(buf, sizeof(buf), "%lu scratch episode%s", (unsigned long)m->scratches, plural(m->scratches));
+    disp_ftext(&font_body, IN_X + 14, CARD_Y + 50, buf, C_TEXT);
+    if (m->scratchy) {  // a red pill while it looks like scratching right now
+        disp_round_rect(IN_X, CARD_Y + 66, IN_W, 15, 7, C_BAD);
+        disp_ftext_centered(&font_label, DISP_W / 2, CARD_Y + 68, "Scratching detected", C_WHITE);
+    } else if (card_b == FULL_B) {
+        disp_ftext(&font_label, IN_X, CARD_Y + 68, "Tap for sensors", C_MUTED);
     }
-    hold_bar(m);
+}
+
+static void screen_saved(const ui_model_t *m) {
+    card();
+    disp_circle(IN_X + 14, CARD_Y + 20, 13, C_TEAL);
+    ICON(IN_X + 5, CARD_Y + 14, CHECK, 2, C_WHITE, 0);
+    disp_ftext(&font_title, IN_X + 36, CARD_Y + 8, "Saved", C_TEAL);
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%.0f min, %lu scratch%s", m->last_minutes, (unsigned long)m->last_scratches,
+             m->last_scratches == 1 ? "" : "es");  // "episodes" doesn't fit a long recording
+    disp_ftext(&font_body, IN_X, CARD_Y + 44, buf, C_TEXT);
+    const char *sync = !m->sm->linked ? "Syncs when connected" : m->sm->outbox ? "Sending to your phone..." : "Sent to your phone";
+    disp_ftext(&font_label, IN_X, CARD_Y + 62, sync, m->sm->linked && !m->sm->outbox ? C_OK : C_MUTED);
 }
 
 static void screen_syncing(const ui_model_t *m) {
-    card("Syncing", C_DEEP, SYNC, ROWS(SYNC), C_DEEP, 0);
+    card();
+    title("Syncing", C_TEAL);
+    ICON(IN_R - 18, CARD_Y + 8, SYNC, 2, C_TEAL, 0);
     char buf[40];
     snprintf(buf, sizeof(buf), "%lu readings left", (unsigned long)m->sm->outbox);
     disp_ftext(&font_body, IN_X, CARD_Y + 36, buf, C_TEXT);
     for (int i = 0; i < 3; i++)
-        disp_circle(DISP_W / 2 - 14 + i * 14, CARD_Y + 68, 4, (int)(m->now_ms / 300 % 3) == i ? C_DEEP : C_TRACK);
-    hold_bar(m);
+        disp_circle(DISP_W / 2 - 14 + i * 14, CARD_Y + 64, 4, (int)(m->now_ms / 300 % 3) == i ? C_TEAL : C_SOFT);
+}
+
+static void screen_sensors(const ui_model_t *m) {
+    card();
+    disp_ftext(&font_label, IN_X, CARD_Y + 4, "Sensors", C_TEAL);
+    char mem[16];
+    unsigned pct = m->outbox_cap ? (unsigned)(m->sm->outbox * 100 / m->outbox_cap) : 0;
+    snprintf(mem, sizeof(mem), "%u%% used", pct);
+    row(CARD_Y + 18, "Movement", "OK", C_OK);
+    row(CARD_Y + 31, "Skin sensor", m->gsr_state == SENSOR_OK ? "On skin" : m->gsr_state == SENSOR_IDLE ? "Not on skin" : "None",
+        m->gsr_state == SENSOR_OK ? C_OK : m->gsr_state == SENSOR_IDLE ? C_WARN : C_MUTED);
+    row(CARD_Y + 44, "Skin temp", m->temp_state == SENSOR_OK ? "OK" : m->temp_state == SENSOR_IDLE ? "Settling" : "None",
+        m->temp_state == SENSOR_OK ? C_OK : m->temp_state == SENSOR_IDLE ? C_WARN : C_MUTED);
+    row(CARD_Y + 57, "Phone", m->sm->linked ? "Connected" : "Not connected", m->sm->linked ? C_OK : C_MUTED);
+    row(CARD_Y + 70, "Memory", mem, pct >= 80 ? C_BAD : C_OK);
+    if (card_b == FULL_B) footer("Tap to go back", C_MUTED);
 }
 
 static void screen_error(void) {
-    card("Sensor?", C_BAD, WARN, ROWS(WARN), C_BAD, C_WHITE);
-    disp_ftext_wrapped(&font_body, IN_X, CARD_Y + 32, IN_W, 0,
-                       "Accelerometer not found. Check its wires: SDA 21, SCL 22.", C_TEXT);
-    disp_ftext(&font_label, IN_X, CARD_B - 16, "Retrying...", C_MUTED);
+    card();
+    ICON(IN_X, CARD_Y + 7, WARN, 2, C_BAD, C_WHITE);
+    disp_ftext(&font_body, IN_X + 24, CARD_Y + 9, "Sensor problem", C_BAD);
+    disp_ftext_wrapped(&font_body, IN_X, CARD_Y + 32, IN_W, 0, "The movement sensor isn't answering. Check its wires: SDA 21, SCL 22.", C_TEXT);
+    footer("Retrying...", C_MUTED);
 }
 
 static void alert_card(const ui_model_t *m) {
-    disp_round_rect(CARD_X - 3, CARD_Y - 3, CARD_W + 6, CARD_H + 6, 11, C_BERRY);
-    disp_round_rect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, C_TRACK);
-    ICON(IN_X, CARD_Y + 5, FLOWER, 2, C_DEEP, C_BERRY);
+    disp_round_rect(CARD_X - 3, CARD_Y - 3, CARD_W + 6, FULL_B - CARD_Y + 6, 11, C_BAD);
+    disp_round_rect(CARD_X, CARD_Y, CARD_W, FULL_B - CARD_Y, 8, C_CARD);
+    ICON(IN_X, CARD_Y + 5, FLOWER, 2, C_TEAL, C_SOFT);
     char buf[40];
     snprintf(buf, sizeof(buf), "Flare risk %s", m->alert_level[0] ? m->alert_level : "high");
     disp_ftext(&font_label, IN_X + 24, CARD_Y + 4, "Heads up", C_BAD);
     disp_ftext(&font_body, IN_X + 24, CARD_Y + 15, buf, C_TEXT);
-    // tight line spacing: two lines of reason and two of tip fit above the footer
     int y = disp_ftext_wrapped(&font_body, IN_X, CARD_Y + 31, IN_W, -2, m->alert_reason, C_TEXT);
     disp_ftext_wrapped(&font_label, IN_X, y + 1, IN_W, -3, m->alert_tip, C_MUTED);
-    disp_ftext(&font_label, IN_X, CARD_B - 13, "Double-tap to dismiss", C_DEEP);
+    disp_ftext(&font_label, IN_X, FULL_B - 13, "Double-tap to dismiss", C_TEAL);
+}
+
+static void warning_strip(ui_warning_t w) {
+    static const char *text[] = {"", "Memory nearly full", "Skin sensor not on skin", "Temp sensor not reading",
+                                 "Offline: saving on band"};
+    uint16_t bg = w == WARN_STORAGE ? C_BAD : w == WARN_OFFLINE ? C_DEEP : C_WARN;
+    disp_round_rect(CARD_X, WARN_Y, CARD_W, 16, 6, bg);
+    ICON(CARD_X + 6, WARN_Y + 4, WARN, 1, C_WHITE, bg);
+    disp_ftext(&font_label, CARD_X + 18, WARN_Y + 2, text[w], C_WHITE);
 }
 
 void ui_render(const ui_model_t *m) {
+    static ui_flow_t flow;
+    static bool flow_ready;
+    if (!flow_ready) ui_flow_init(&flow), flow_ready = true;
+    ui_inputs_t in = {.state = m->sm->state, .linked = m->sm->linked, .page = m->sm->page, .held_ms = m->held_ms,
+                      .outbox = m->sm->outbox, .outbox_cap = m->outbox_cap, .gsr = m->gsr_state,
+                      .temp = m->temp_state, .now_ms = m->now_ms};
+    ui_screen_t scr = ui_flow_screen(&flow, &in);
+    ui_warning_t warn = ui_flow_warning(&flow, &in);
+    if (m->preview_screen) scr = (ui_screen_t)(m->preview_screen - 1);
+    if (m->preview_warning) warn = (ui_warning_t)(m->preview_warning - 1);
+
     disp_fill(C_BG);
-    if (m->sm->state == ST_BOOT) {
+    if (scr == SCR_BOOT) {
         screen_boot();
-    } else {
-        header(m);
-        switch (m->sm->state) {
-        case ST_PAIRING: screen_pairing(m); break;
-        case ST_READY: screen_ready(m); break;
-        case ST_RECORDING: screen_recording(m); break;
-        case ST_SYNCING: screen_syncing(m); break;
-        case ST_ERROR: screen_error(); break;
-        default: break;
-        }
-        if (m->sm->alert) alert_card(m);
+        disp_flush();
+        return;
     }
+    bool alert = m->sm->alert;
+    card_b = warn && !alert ? WARN_Y - 3 : FULL_B;
+    header(m);
+    switch (scr) {
+    case SCR_CONNECT: screen_connect(m); break;
+    case SCR_HOME: screen_home(m); break;
+    case SCR_HOLD_START: screen_hold(m, false); break;
+    case SCR_HOLD_STOP: screen_hold(m, true); break;
+    case SCR_STARTED: screen_started(); break;
+    case SCR_RECORDING: screen_recording(m); break;
+    case SCR_SAVED: screen_saved(m); break;
+    case SCR_SYNCING: screen_syncing(m); break;
+    case SCR_SENSORS: screen_sensors(m); break;
+    case SCR_SENSOR_ERROR: screen_error(); break;
+    default: break;
+    }
+    if (alert) alert_card(m);
+    else if (warn) warning_strip(warn);
     disp_flush();
 }

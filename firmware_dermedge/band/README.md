@@ -1,7 +1,7 @@
 # DermEdge band firmware (ESP-IDF)
 
 The wrist band: scratch detection from the ADXL345, a touch pad for start/stop, the 1.8" ST7735
-screen in the website's old pink palette (moving to the site's teal), and a Bluetooth LE link to the DermEdge website,
+screen in the website's teal theme, and a Bluetooth LE link to the DermEdge website,
 which relays readings to the laptop hub (`app/band.py`).
 
 ```
@@ -16,8 +16,9 @@ python3 tools/record.py check # is the accelerometer streaming 800 Hz cleanly?
 ![Every screen, rendered on the Mac by test/preview.sh](test/preview.png)
 
 The screens use the website's fonts (Young Serif for titles, Figtree for text, converted to 4-bit
-anti-aliased bitmaps) and its palette pushed much deeper, since this panel washes pastels out to
-white. The panel wants RGB order (`MADCTL 0xA0`); with the BGR bit set, pink shows as lilac.
+anti-aliased bitmaps), its teal, green and white theme (pale tints a step deeper, since this panel
+washes them out) and its DermEdge drop logo, drawn from the website's SVG by `tools/make_art.py`.
+The panel wants RGB order (`MADCTL 0xA0`); with the BGR bit set, colours swap red and blue.
 
 ## Wiring
 
@@ -52,15 +53,33 @@ Over USB serial (`./idf.sh -p /dev/cu.SLAB_USBtoUART monitor`, or any serial ter
 | `start` / `stop` | start or stop a recording, like the touch pad (works without the website) |
 | `peek` | the last few readings exactly as they'll go out over Bluetooth |
 
-## States
+## States and screens
 
-`BOOT` → `PAIRING` (shows the 6-digit Bluetooth code) → `READY` ⇄ `RECORDING` → `SYNCING` → `READY`,
-`ERROR` while the accelerometer is missing, and a flare alert card over any state.
+The device: `BOOT` → `PAIRING` (shows the 6-digit Bluetooth code) → `READY` ⇄ `RECORDING` →
+`SYNCING` → `READY`, `ERROR` while the accelerometer is missing (`main/app_sm.c`). On top of it,
+`main/ui_flow.c` picks the screen and the warning, so a hold shows its progress, a start is
+confirmed and a stop shows what was saved:
+
+| Screen | When |
+|---|---|
+| Connect | not paired: how to connect, or the pairing code |
+| Home | ready: phone and skin sensor status, "Hold the pad to start" |
+| Hold to start / Hold to stop | while the pad is held: a ring fills over 2 s; letting go cancels |
+| Started | 1.5 s after a recording starts |
+| Recording | timer, scratch episodes, "Scratching detected" while it's happening |
+| Saved | 4 s after stopping: length, scratches, and whether it's synced |
+| Sensors | tap on Home or Recording: movement, skin sensor, skin temp, phone, memory, in words |
+| Syncing, Sensor problem | readings going out; the accelerometer missing |
+| Flare alert | over anything, until a double tap (or the website) dismisses it |
+
+Users see plain status, not raw numbers (those are on the serial line: `skin on`). Warnings sit
+in a strip along the bottom, most urgent first: band memory 80% full; skin sensor off the skin or
+temperature sensor not reading for 10 s during a recording, once it had worked; recording offline.
 
 | Touch | Does |
 |---|---|
-| Hold 2 s | start / stop recording (also works offline; readings wait up to an hour) |
-| Tap | flip between the main and detail view |
+| Hold 2 s | start / stop recording (also works offline) |
+| Tap | Sensors page and back |
 | Double tap | dismiss an alert |
 
 ## Scratch detection

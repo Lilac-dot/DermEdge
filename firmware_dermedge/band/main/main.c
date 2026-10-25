@@ -176,6 +176,8 @@ static void skin_results(uint32_t now) {
     skin_reading_t r;
     while (xQueueReceive(skin_q, &r, 0)) {
         ui.gsr_ok = r.gsr_ok, ui.temp_ok = r.temp_ok, ui.skin_sim = r.sim;
+        ui.gsr_state = r.gsr_ok ? SENSOR_OK : r.gsr_connected ? SENSOR_IDLE : SENSOR_ABSENT;
+        ui.temp_state = r.temp_ok ? SENSOR_OK : r.temp_settling ? SENSOR_IDLE : SENSOR_ABSENT;
         if (r.gsr_ok) ui.gsr_us = r.us;
         if (r.temp_ok) ui.skin_c = r.c;
         if (sm.state != ST_RECORDING) continue;
@@ -453,6 +455,7 @@ void app_main(void) {
     ESP_ERROR_CHECK(gpio_config(&io));
 
     ob_alloc();
+    ui.outbox_cap = ob_len;
     sm_init(&sm);
     pad_init(&pad);
     disp_init();
@@ -520,8 +523,10 @@ void app_main(void) {
             last_status = now;
             send_status();
         }
-        bool animated = sm.state == ST_RECORDING || sm.state == ST_SYNCING;
-        if (dirty || (animated && now - last_frame >= FRAME_MS)) {
+        // animated screens every 250 ms; the rest once a second, so timed screens (Started, Saved)
+        // and warnings that wait 10 s still appear and go away without anything else changing
+        bool animated = sm.state == ST_RECORDING || sm.state == ST_SYNCING || ui.held_ms;
+        if (dirty || now - last_frame >= (animated ? FRAME_MS : 1000)) {
             last_frame = now;
             dirty = false;
             ui_render(&ui);

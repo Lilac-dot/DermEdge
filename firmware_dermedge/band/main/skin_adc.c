@@ -111,6 +111,8 @@ static void skin_task(void *arg) {
             last_c = r.c;
         }
         r.temp_ok = skin_temp_plausible(r.c) && (sim || steady >= TEMP_STEADY_N);
+        r.gsr_connected = sim || !floating;
+        r.temp_settling = skin_temp_plausible(r.c) && !r.temp_ok;
         xQueueSend(out, &r, 0);
         if (debug && n % SKIN_GSR_HZ == 0)
             printf("skin: GSR pin %4.0f mV (reading %3.0f, no-skin %3.0f) -> %s | thermistor pin %4.0f mV -> %s%s\n",

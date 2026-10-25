@@ -63,8 +63,13 @@ int main(int argc, char **argv) {
     ui_render(&m);
     save(dir, "5_recording");
     sm.page = 1;
+    m.gsr_ok = m.temp_ok = true;
+    m.gsr_us = 1.84f;
+    m.skin_c = 32.4f;
+    m.skin_sim = 1;
     ui_render(&m);
     save(dir, "6_recording_detail");
+    m.skin_sim = 0;
 
     sm.page = 0;
     sm.state = ST_SYNCING;

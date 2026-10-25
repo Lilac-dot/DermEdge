@@ -64,14 +64,16 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
 - `t` is seconds since the band started that recording. Batch a few, drop `r`, and
   `POST /api/band/sessions/{id}/readings`. For accurate times when the hub session started later
   than the band (offline recording), send `ts = now - (status.el - t)` instead of `t`.
-- The band buffers about **an hour** of readings while disconnected and sends them when the link
-  comes back (status `"s":"syncing"`, `q` counting down).
+- The band buffers about **an hour** of readings while disconnected (about **27 minutes** with
+  the GSR on, since it adds a reading a second) and sends them when the link comes back (status
+  `"s":"syncing"`, `q` counting down).
 - **Sensor readings** (GSR, skin temperature, moisture). The website already relays, stores and
-  charts these; the band sends them once the sensors are wired. Same `r` and `t` as above, and a
-  message may carry several items:
+  charts these. Same `r` and `t` as above, and a message may carry several items. What the band's
+  firmware sends (checked against the website's code, 26 Oct):
   ```
-  {"r":3,"gsr":[{"t":12.25,"microsiemens":1.84}]}            4 Hz, 0-100 uS
-  {"r":3,"skin_temp":[{"t":12.0,"c":32.4}]}                   1 Hz is plenty, 10-50 C
+  {"r":3,"gsr":[{"t":12.00,"microsiemens":1.84},{"t":12.25,...},{"t":12.50,...},{"t":12.75,...}]}
+                                                              4 Hz, four to a message (~145 bytes)
+  {"r":3,"skin_temp":[{"t":12.0,"c":32.4}]}                   every 5 s, a 5 s average, 10-50 C
   {"r":3,"moisture":[{"t":12.0,"patch":47.1,"reference":50.2}]}  eczema patch, healthy skin
   ```
   GSR should be sampled at **4 Hz** (the E4's rate the stress model was trained at), in
@@ -80,6 +82,9 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
   recording, so the wearer sits still for that part. Skin temperature is shown and stored but
   not used for stress: in the WESAD test it drifted with time on the wrist and made stress
   detection worse. `temperatures` (`lesion_c`) is also accepted and treated as skin temperature.
+  The band **sends nothing** while the electrodes are off the skin, the GSR module or the
+  thermistor is unplugged, or the thermistor hasn't read steadily for 3 s yet, so a gap in the
+  readings means "no data", never zeros.
 - The hub (`app/band.py`) accepts `gsr` and `moisture` already; it has no `skin_temp` field yet
   (its `temperatures` table was built for the lesion-vs-healthy pair, now future scope).
 
@@ -109,6 +114,9 @@ count:
 | `act` | movement in the last second, g (about 0-0.6) |
 | `q` | readings waiting to be sent |
 | `alert` | 1 while an alert shows on the band |
+| `gsr` | live skin conductance in µS, `null` while off skin or unplugged |
+| `tc` | live skin temperature in °C, `null` while unplugged or settling |
+| `sim` | 1 while the band's skin readings are **simulated** (testing without sensors): label them so |
 
 ### 7. History
 - `GET /api/band/sessions`: every session with `duration_s` and `scratch_count`.

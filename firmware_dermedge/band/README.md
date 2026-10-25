@@ -29,6 +29,28 @@ white. The panel wants RGB order (`MADCTL 0xA0`); with the BGR bit set, pink sho
 | | SDA / SCL | 21 / 22 |
 | | CS / SDO | 3V3 / GND (I2C mode, address 0x53) |
 | 4-pad touch module | OUT1 (OUT2-4 unused for now) | 27 (high while touched) |
+| Grove GSR module | SIG / VCC / GND | 32 / 3V3 / GND |
+| NTC thermistor, 10 kΩ B3950 | divider: 3V3 → 10 kΩ → **GPIO 34** → thermistor → GND | 34 |
+
+## Skin sensors (GSR and skin temperature)
+
+A skin task (`main/skin_adc.c`, maths in `main/skin.c`) reads GSR at 4 Hz and the thermistor
+once a second on ADC1, and the band sends them in the website's format: GSR four readings to a
+message, skin temperature as a 5 s average. Nothing is sent while a reading isn't real:
+electrodes off the skin, a sensor unplugged (an unplugged GSR pin floats, which the task catches
+by briefly pulling it up and down; a real module's output doesn't move), or the thermistor not yet
+steady for 3 s. The recording's detail page (tap) shows both, and the header says **SIM** while
+they're simulated.
+
+Over USB serial (`./idf.sh -p /dev/cu.SLAB_USBtoUART monitor`, or any serial terminal at 115200):
+
+| Command | Does |
+|---|---|
+| `skin on` / `skin off` | print the pins' millivolts, the readings and a verdict once a second |
+| `gsr cal` | with the electrodes **off** the skin: store this module's no-skin reading (about 512) |
+| `sim on` / `sim stress` / `sim off` | simulated calm / stressed readings instead of the sensors |
+| `start` / `stop` | start or stop a recording, like the touch pad (works without the website) |
+| `peek` | the last few readings exactly as they'll go out over Bluetooth |
 
 ## States
 

@@ -74,6 +74,10 @@ static void header(const ui_model_t *m) {
     int x = disp_ftext(&font_label, 20, 3, "DermEdge", C_WHITE);
     for (int i = 0; i < 3; i++) ICON(x + 6 + i * 9, 7 + (i % 2) * 3, BLOSSOM, 1, C_DEEP, C_WHITE);
     ICON(148, 4, BLUETOOTH, 1, m->sm->linked ? C_WHITE : C_CARD, 0);
+    if (m->skin_sim) {  // never let simulated skin readings pass for real ones
+        disp_round_rect(84, 3, 26, 13, 4, C_WHITE);
+        disp_ftext(&font_label, 87, 3, "SIM", C_BAD);
+    }
     if (m->sm->state == ST_RECORDING && (m->now_ms / 500) % 2 == 0) {  // blinking REC
         disp_circle(117, 10, 3, C_WHITE);
         disp_ftext(&font_label, 123, 3, "REC", C_WHITE);
@@ -165,15 +169,18 @@ static void screen_recording(const ui_model_t *m) {
         int w = (int)(IN_W * (level > 1 ? 1 : level));
         if (w > 6) disp_round_rect(IN_X, CARD_Y + 62, w, 8, 3, m->scratchy ? C_BAD : C_SAGE);
         claw_line(CARD_Y + 76, m->scratches, C_TEXT);
-    } else {  // detail page
+    } else {  // detail page: six rows, 12 px apart
         snprintf(buf, sizeof(buf), "%.1f Hz", m->freq_hz);
-        row(CARD_Y + 20, "Stroke rate", buf, C_TEXT);
+        row(CARD_Y + 18, "Stroke rate", buf, C_TEXT);
         snprintf(buf, sizeof(buf), "%.3f g", m->activity);
-        row(CARD_Y + 34, "Movement", buf, C_TEXT);
+        row(CARD_Y + 30, "Movement", buf, C_TEXT);
+        if (m->gsr_ok) snprintf(buf, sizeof(buf), "%.2f uS", m->gsr_us);
+        row(CARD_Y + 42, "GSR", m->gsr_ok ? buf : "not on skin", m->gsr_ok ? C_TEXT : C_MUTED);
+        if (m->temp_ok) snprintf(buf, sizeof(buf), "%.1f C", m->skin_c);
+        row(CARD_Y + 54, "Skin temp", m->temp_ok ? buf : "no sensor", m->temp_ok ? C_TEXT : C_MUTED);
         snprintf(buf, sizeof(buf), "%lu", (unsigned long)m->sm->outbox);
-        row(CARD_Y + 48, "Waiting to send", buf, C_TEXT);
-        row(CARD_Y + 62, "Laptop", m->sm->linked ? "connected" : "offline", m->sm->linked ? C_OK : C_MUTED);
-        row(CARD_Y + 76, "Started from", m->sm->source == SRC_TOUCH ? "touch pad" : "website", C_TEXT);
+        row(CARD_Y + 66, "Waiting to send", buf, C_TEXT);
+        row(CARD_Y + 78, "Laptop", m->sm->linked ? "connected" : "offline", m->sm->linked ? C_OK : C_MUTED);
     }
     hold_bar(m);
 }

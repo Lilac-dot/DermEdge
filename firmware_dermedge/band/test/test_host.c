@@ -5,6 +5,7 @@
 
 #include "../main/app_sm.h"
 #include "../main/scratch.h"
+#include "../main/skin.h"
 #include "../main/touch.h"
 
 static int failures;
@@ -127,6 +128,40 @@ static void test_scratch(void) {
     CHECK(r.events == 0, "jolt: %d events", r.events);
 }
 
+// --- skin conductance and temperature ---------------------------------------------------
+static void test_skin(void) {
+    puts("skin sensors");
+    float c = skin_ntc_c(1650, 3300, 10000, 10000, 3950);
+    CHECK(fabsf(c - 25.0f) < 0.01f, "NTC at half the supply is its rated 25 C, got %.2f", c);
+    c = skin_ntc_c(1236.13f, 3300, 10000, 10000, 3950);  // worked out from the beta equation
+    CHECK(fabsf(c - 37.0f) < 0.05f, "NTC at 37 C, got %.2f", c);
+    CHECK(!skin_temp_plausible(skin_ntc_c(3300, 3300, 10000, 10000, 3950)), "open thermistor (pin at 3V3) rejected");
+    CHECK(!skin_temp_plausible(skin_ntc_c(0, 3300, 10000, 10000, 3950)), "shorted thermistor (pin at 0 V) rejected");
+    CHECK(!skin_temp_plausible(skin_ntc_c(3100, 3300, 10000, 10000, 3950)), "a pin near 3V3 (no NTC) is out of range");
+    float us = skin_gsr_us(967.74f, 3300, 512);
+    CHECK(fabsf(us - 13.054f) < 0.01f, "Grove a=300 is 13.05 uS, got %.3f", us);
+    CHECK(skin_gsr_us(1651.6f, 3300, 512) == 0, "Grove at its no-skin reading means not on skin");
+    CHECK(!skin_gsr_plausible(0), "0 uS is not sent");
+    // the simulator: calm stays plausible, stress raises conductance
+    skin_sim_t sim;
+    skin_sim_init(&sim, 7);
+    float calm = 0, stressed = 0, t;
+    int bad = 0;
+    for (int i = 0; i < 4 * 600; i++) {
+        skin_sim_step(&sim, &us, &t);
+        bad += !skin_gsr_plausible(us) || !skin_temp_plausible(t);
+        if (i >= 4 * 300) calm += us / (4 * 300);
+    }
+    sim.stressed = true;
+    for (int i = 0; i < 4 * 600; i++) {
+        skin_sim_step(&sim, &us, &t);
+        bad += !skin_gsr_plausible(us) || !skin_temp_plausible(t);
+        if (i >= 4 * 300) stressed += us / (4 * 300);
+    }
+    CHECK(bad == 0, "%d simulated readings out of range", bad);
+    CHECK(stressed > calm * 1.5f, "simulated stress raises conductance: %.2f vs calm %.2f uS", stressed, calm);
+}
+
 // --- touch gestures --------------------------------------------------------------------
 // Plays a pattern of (level, ms) steps through the decoder at 10 ms polling
 static int gestures(const int *steps, int n, touch_gesture_t *out) {
@@ -207,6 +242,7 @@ static void test_sm(void) {
 int main(void) {
     srand(1);
     test_scratch();
+    test_skin();
     test_touch();
     test_sm();
     printf(failures ? "%d FAILED\n" : "all passed\n", failures);

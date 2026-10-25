@@ -4,7 +4,9 @@
 // A sensor task drains the accelerometer's FIFO every 10 ms (it holds 40 ms at 800 Hz) and a
 // detector task scores each second of it; one loop every 20 ms reads the touch pad, handles
 // Bluetooth messages and the detector's results, sends queued readings and redraws. Typing
-// "raw on" on the USB serial line streams the raw 800 Hz samples for tools/record.py. The website relays the
+// "raw on" on the USB serial line streams the raw 800 Hz samples for tools/record.py. A skin
+// task reads GSR at 4 Hz and the thermistor once a second (skin_adc.c), sent only while they read
+// sensibly; "sim on" stands in for them, "skin on" prints the pins, "gsr cal" calibrates. The website relays the
 // readings to the laptop hub (app/band.py); recordings made offline wait in the outbox (about
 // an hour of them) and go out when the laptop reconnects.
 #include <stdio.h>
@@ -27,6 +29,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "scratch.h"
+#include "skin.h"
+#include "skin_adc.h"
 #include "touch.h"
 #include "ui.h"
 
@@ -57,19 +61,33 @@ static void on_ble(ble_event_t ev, uint32_t arg, const char *text) {
 }
 
 // --- outbox: readings waiting for the website --------------------------------------------
-typedef enum { ITEM_MOTION, ITEM_SCRATCH } item_kind_t;
+typedef enum { ITEM_MOTION, ITEM_SCRATCH, ITEM_GSR, ITEM_TEMP } item_kind_t;
+// 16 bytes, so the outbox still holds an hour of motion; a GSR item packs a second (4 readings).
+// With GSR on, about 2.2 items a second: the outbox then covers about 27 minutes offline.
 typedef struct {
     uint16_t recording;
-    uint8_t kind;
-    float t, a, b;  // motion: t, activity, scratch_energy; scratch: t, duration_s, intensity
+    uint8_t kind, n;  // n: GSR readings in v
+    float t;          // s since the recording started (GSR: its first reading)
+    union {
+        struct {
+            float a, b;  // motion: activity, scratch_energy; scratch: duration_s, intensity; temp: a = C
+        };
+        uint16_t v[4];   // GSR in hundredths of a microsiemens, 4 Hz
+    };
 } item_t;
+_Static_assert(sizeof(item_t) == 16, "an item is 16 bytes");
+
+static item_t item(uint32_t rec, item_kind_t kind, float t, float a, float b) {
+    return (item_t){.recording = (uint16_t)rec, .kind = kind, .t = t, .a = a, .b = b};
+}
 static item_t *outbox;  // on the heap: Bluetooth leaves too little static RAM for it
 static int ob_len, ob_head, ob_count;
 
 static void ob_alloc(void) {
     for (ob_len = OUTBOX_LEN; ob_len >= 60; ob_len /= 2)
         if ((outbox = malloc(ob_len * sizeof(item_t)))) break;
-    ESP_LOGI(TAG, "outbox holds %d readings (%d min offline)", ob_len, ob_len / 60);
+    ESP_LOGI(TAG, "outbox holds %d readings (%d min offline, about %d with GSR on)", ob_len, ob_len / 60,
+             ob_len * 10 / 22 / 60);
 }
 
 static void ob_push(item_t it) {
@@ -82,16 +100,31 @@ static void ob_push(item_t it) {
 }
 
 static void ob_format(const item_t *it, char *buf, size_t n) {
-    if (it->kind == ITEM_MOTION)
+    switch (it->kind) {
+    case ITEM_MOTION:
         snprintf(buf, n, "{\"r\":%u,\"motion\":[{\"t\":%.1f,\"activity\":%.4f,\"scratch_energy\":%.4f}]}",
                  it->recording, it->t, it->a, it->b);
-    else
+        break;
+    case ITEM_SCRATCH:
         snprintf(buf, n, "{\"r\":%u,\"scratch_events\":[{\"t\":%.1f,\"duration_s\":%.1f,\"intensity\":%.4f}]}",
                  it->recording, it->t, it->a, it->b);
+        break;
+    case ITEM_GSR: {  // {"r":3,"gsr":[{"t":12.25,"microsiemens":1.84},...]}, as docs/DERMEDGE_APP_GUIDE.md says
+        int k = snprintf(buf, n, "{\"r\":%u,\"gsr\":[", it->recording);
+        for (int i = 0; i < it->n && k < (int)n; i++)
+            k += snprintf(buf + k, n - k, "%s{\"t\":%.2f,\"microsiemens\":%.2f}", i ? "," : "",
+                          it->t + (float)i / SKIN_GSR_HZ, it->v[i] / 100.0f);
+        if (k < (int)n) snprintf(buf + k, n - k, "]}");
+        break;
+    }
+    case ITEM_TEMP:
+        snprintf(buf, n, "{\"r\":%u,\"skin_temp\":[{\"t\":%.1f,\"c\":%.2f}]}", it->recording, it->t, it->a);
+        break;
+    }
 }
 
 static void ob_send(void) {
-    char buf[160];
+    char buf[200];  // a GSR item is about 145 characters, under the ~180 a notification carries on macOS
     for (int i = 0; i < SENDS_PER_LOOP && ob_count && ble_data_ready(); i++) {
         ob_format(&outbox[ob_head], buf, sizeof(buf));
         if (!ble_notify_data(buf)) break;  // radio busy: try next loop
@@ -110,15 +143,63 @@ static char label[24] = "day";
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 
 static void send_status(void) {
-    char buf[200];
+    char buf[240], gsr[16] = "null", tc[16] = "null";
+    if (ui.gsr_ok) snprintf(gsr, sizeof(gsr), "%.2f", ui.gsr_us);
+    if (ui.temp_ok) snprintf(tc, sizeof(tc), "%.1f", ui.skin_c);
+    // gsr / tc: the live skin readings (null while off skin or unplugged); sim: 1 while simulated
     snprintf(buf, sizeof(buf),
              "{\"id\":\"%s\",\"s\":\"%s\",\"r\":%lu,\"src\":\"%s\",\"label\":\"%s\",\"el\":%.1f,"
-             "\"n\":%lu,\"act\":%.3f,\"q\":%d,\"alert\":%d}",
+             "\"n\":%lu,\"act\":%.3f,\"q\":%d,\"alert\":%d,\"gsr\":%s,\"tc\":%s,\"sim\":%d}",
              ble_device_id(), sm_state_name(sm.state), (unsigned long)sm.recording,
              sm.source == SRC_TOUCH ? "touch" : "website", label,
              sm.state == ST_RECORDING ? ui.elapsed_s : 0.0f, (unsigned long)ui.scratches, ui.activity, ob_count,
-             sm.alert);
+             sm.alert, gsr, tc, ui.skin_sim);
     ble_notify_status(buf);
+}
+
+// --- skin readings: GSR packed four to an item, temperature averaged over 5 s ---------------
+#define TEMP_EVERY_S 5
+static QueueHandle_t skin_q;
+static item_t gsr_item;  // filling: n readings so far
+static float temp_sum, temp_t0;
+static int temp_n;
+
+static void skin_flush(void) {
+    if (gsr_item.n) ob_push(gsr_item);
+    gsr_item.n = 0;
+    if (temp_n) ob_push(item(sm.recording, ITEM_TEMP, temp_t0, temp_sum / temp_n, 0));
+    temp_n = 0;
+    temp_sum = 0;
+}
+
+static void skin_results(uint32_t now) {
+    skin_reading_t r;
+    while (xQueueReceive(skin_q, &r, 0)) {
+        ui.gsr_ok = r.gsr_ok, ui.temp_ok = r.temp_ok, ui.skin_sim = r.sim;
+        if (r.gsr_ok) ui.gsr_us = r.us;
+        if (r.temp_ok) ui.skin_c = r.c;
+        if (sm.state != ST_RECORDING) continue;
+        float t = (now - rec_start_ms) / 1000.0f;
+        if (r.gsr_ok) {
+            if (!gsr_item.n) gsr_item = (item_t){.recording = (uint16_t)sm.recording, .kind = ITEM_GSR, .t = t};
+            gsr_item.v[gsr_item.n++] = (uint16_t)(r.us * 100 + 0.5f);
+            if (gsr_item.n == 4) {
+                ob_push(gsr_item);
+                gsr_item.n = 0;
+            }
+        } else if (gsr_item.n) {  // electrodes came off: send what there is, so times stay exact
+            ob_push(gsr_item);
+            gsr_item.n = 0;
+        }
+        if (r.temp_ok) {
+            if (!temp_n) temp_t0 = t;
+            temp_sum += r.c, temp_n++;
+            if (t - temp_t0 >= TEMP_EVERY_S) {
+                ob_push(item(sm.recording, ITEM_TEMP, temp_t0, temp_sum / temp_n, 0));
+                temp_n = 0, temp_sum = 0;
+            }
+        }
+    }
 }
 
 static void save_token(const char *token) {
@@ -220,7 +301,23 @@ static void detect_task(void *arg) {
     }
 }
 
-// "raw on" / "raw off" from the USB serial line
+static int command(char *c);
+static int handle(sm_event_t ev, uint32_t arg);
+static int serial_dirty;  // a serial command changed the state: redraw
+
+// Last few outbox items, formatted exactly as they'll go out over Bluetooth
+static void peek(void) {
+    char buf[200];
+    int k = ob_count < 6 ? ob_count : 6;
+    printf("outbox: %d readings waiting%s\n", ob_count, k ? "; the newest:" : "");
+    for (int i = ob_count - k; i < ob_count; i++) {
+        ob_format(&outbox[(ob_head + i) % ob_len], buf, sizeof(buf));
+        printf("  %s (%d bytes)\n", buf, (int)strlen(buf));
+    }
+}
+
+// From the USB serial line: "raw on/off" (tools/record.py), "sim on/stress/off", "skin on/off",
+// "gsr cal", "peek", and anything the website can send (start, stop, ...)
 static void serial_commands(void) {
     static char line[32];
     static int len;
@@ -235,11 +332,33 @@ static void serial_commands(void) {
         if (!strcmp(line, "raw on")) {
             esp_log_level_set("*", ESP_LOG_NONE);  // nothing but frames on the line
             raw_mode = true;
+        } else if (!strcmp(line, "sim on") || !strcmp(line, "sim stress")) {
+            skin_set_sim(true);  // fake GSR and temperature, marked SIM on the screen and "sim":1 in the status
+            skin_set_sim_stressed(!strcmp(line, "sim stress"));
+            ESP_LOGI(TAG, "skin sensors simulated (%s)", strcmp(line, "sim stress") ? "calm" : "stressed");
+        } else if (!strcmp(line, "sim off")) {
+            skin_set_sim(false);
+            ESP_LOGI(TAG, "skin sensors real");
+        } else if (!strcmp(line, "skin on") || !strcmp(line, "skin off")) {
+            skin_set_debug(!strcmp(line, "skin on"));
+        } else if (!strcmp(line, "gsr cal")) {  // with the electrodes off the skin
+            float a;
+            bool ok = skin_gsr_calibrate(&a);
+            if (ok) ESP_LOGI(TAG, "GSR calibrated: no-skin reading %.0f, saved", a);
+            else ESP_LOGW(TAG, "GSR calibration refused: reading %.0f is far from 512. Electrodes off? Module wired?", a);
         } else if (!strcmp(line, "raw off")) {
             raw_mode = false;
             esp_log_level_set("*", ESP_LOG_INFO);
             ESP_LOGI(TAG, "raw off; FIFO overruns %lu, buffer drops %lu", (unsigned long)fifo_overruns,
                      (unsigned long)buffer_drops);
+        } else if (!strcmp(line, "peek")) {
+            peek();
+        } else if (!strcmp(line, "start") || !strcmp(line, "stop")) {
+            // like the touch pad's long press, so it works without the website too
+            bool rec = sm.state == ST_RECORDING;
+            if (rec == !strcmp(line, "stop")) serial_dirty |= handle(EV_LONG_PRESS, 0);
+        } else if (line[0]) {
+            serial_dirty |= command(line);  // dismiss, alert:..., as over Bluetooth
         }
     }
 }
@@ -273,6 +392,7 @@ static int command(char *c) {
 // Carries out the state machine's effects; returns whether to redraw
 static int apply(int fx) {
     if (fx & FX_START_REC) {
+        gsr_item.n = 0, temp_n = 0, temp_sum = 0;
         uint8_t c = DET_RESET;
         xQueueSend(det_cmds, &c, portMAX_DELAY);
         rec_start_ms = now_ms();
@@ -283,6 +403,7 @@ static int apply(int fx) {
     if (fx & FX_STOP_REC) {
         uint8_t c = DET_FLUSH;  // an episode still open comes back as OUT_FLUSHED, for this recording
         flush_rec = sm.recording;
+        skin_flush();  // the last part-second of GSR and temperature
         xQueueSend(det_cmds, &c, portMAX_DELAY);
         ui.has_last = true;
         ui.last_minutes = ui.elapsed_s / 60;
@@ -296,7 +417,7 @@ static int apply(int fx) {
 }
 
 static void scratch_found(uint32_t rec, const scratch_event_t *e) {
-    ob_push((item_t){(uint16_t)rec, ITEM_SCRATCH, e->t, e->duration_s, e->intensity});
+    ob_push(item(rec, ITEM_SCRATCH, e->t, e->duration_s, e->intensity));
     ui.scratches++;
     ESP_LOGI(TAG, "scratch episode: %.1f s at %.1f s, vibration %.3f g", e->duration_s, e->t, e->intensity);
 }
@@ -310,7 +431,7 @@ static void detector_results(void) {
             ui.activity = o.m.activity;
             ui.freq_hz = o.m.freq_hz;
             ui.scratchy = o.m.scratchy;
-            if (recording) ob_push((item_t){(uint16_t)sm.recording, ITEM_MOTION, o.m.t, o.m.activity, o.m.scratch_energy});
+            if (recording) ob_push(item(sm.recording, ITEM_MOTION, o.m.t, o.m.activity, o.m.scratch_energy));
             if (o.has_event && recording) scratch_found(sm.recording, &o.e);
         } else if (o.kind == OUT_FLUSHED && o.has_event) {
             scratch_found(flush_rec, &o.e);  // an episode cut short by stopping
@@ -349,6 +470,8 @@ void app_main(void) {
     // the sensor first, on the core NimBLE doesn't use, so nothing delays the FIFO
     xTaskCreatePinnedToCore(sensor_task, "sensor", 4096, NULL, 10, NULL, 1);
     xTaskCreatePinnedToCore(detect_task, "detect", 6144, NULL, 5, NULL, 1);
+    skin_q = xQueueCreate(8, sizeof(skin_reading_t));
+    skin_adc_start(skin_q);
     ESP_LOGI(TAG, "free heap %lu bytes", (unsigned long)esp_get_free_heap_size());
 
     uint32_t last_status = 0, last_frame = 0;
@@ -378,12 +501,15 @@ void app_main(void) {
         }
 
         serial_commands();
+        dirty |= serial_dirty;
+        serial_dirty = 0;
         if (sensor_ok != sensor_was_ok) {  // the sensor task lost or found the accelerometer
             sensor_was_ok = sensor_ok;
             if (!sensor_ok) ESP_LOGW(TAG, "accelerometer stopped answering");
             dirty |= handle(sensor_ok ? EV_SENSOR_OK : EV_SENSOR_FAIL, 0);
         }
         detector_results();
+        skin_results(now);
         if (sm.state == ST_RECORDING) ui.elapsed_s = (now - rec_start_ms) / 1000.0f;
 
         ob_send();

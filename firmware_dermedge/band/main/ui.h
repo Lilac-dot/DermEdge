@@ -18,6 +18,9 @@ typedef struct {
     uint32_t last_scratches;
     bool has_last;
     char alert_level[12], alert_reason[64], alert_tip[120];
+    float gsr_us, skin_c;     // latest skin readings
+    bool gsr_ok, temp_ok;     // on skin / plugged in
+    int skin_sim;             // 1 while the skin sensors are simulated
 } ui_model_t;
 
 void ui_render(const ui_model_t *m);

@@ -160,7 +160,8 @@ Match the website (`web/index.html`): titles in **Young Serif**, text in **Figtr
 teal accent `#0F7C74` (white text on it), soft accent `#DCEFEC`, headings `#134E4A`, text
 `#1D2B2A`, muted `#5C6F6C`, lines `#D9E6E3`, alerts `#C92F4C`, good `#3A7D1F`. Keep pink and red
 for alerts only, since the skin photos themselves are pink. The full light and dark token sets
-are at the top of `web/index.html`.
+are at the top of `web/index.html`; the site is always light, and the dark set applies only with
+`data-theme="dark"` on `<html>` (no switch for it yet).
 The band's screen still uses the old pink palette (rose `#D84A78`, pink card `#F6B3C6`, deep
 green `#1F551A`) and is due to move to a deeper teal, since its panel washes pastels out; its
 screens are in `firmware_dermedge/band/test/preview.png`.

@@ -7,8 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='19' fill='%23dcefec'/%3E%3Cpath d='M20 8c5 7 9 11.5 9 16.5a9 9 0 0 1-18 0C11 19.5 15 15 20 8z' fill='%230f7c74'/%3E%3C/svg%3E">
 <!-- Installable app (PWA): manifest.webmanifest, and sw.js keeps it working offline -->
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#f4f8f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1a19" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f8f7">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="DermEdge">
@@ -22,7 +21,8 @@
 <script src="/js/band.js"></script>
 <style>
   /* Layout: a pale cool page, white cards with a grey-teal border, teal headings. Serif for names and numbers,
-     a rounded sans for everything else. Colours are tokens; dark mode swaps the tokens only. */
+     a rounded sans for everything else. Colours are tokens. Light always, whatever the device
+     setting; the dark set below applies only with data-theme="dark" on <html>. */
   :root {
     --bg: #f4f8f7; --card: #ffffff; --text: #1d2b2a; --muted: #5c6f6c; --line: #d9e6e3;
     --accent: #0f7c74; --accent-ink: #ffffff; --accent-soft: #dcefec; --deep: #134e4a;
@@ -32,16 +32,6 @@
     --serif: "Young Serif", Georgia, "Times New Roman", serif;
     --sans: "Figtree", -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: light;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0f1a19; --card: #172625; --text: #e6f2f0; --muted: #9bb5b1; --line: #2a3d3b;
-      --accent: #4fc3b6; --accent-ink: #062421; --accent-soft: #183a37; --deep: #8fd9cf;
-      --ok: #93d16b; --warn: #ffaf63; --bad: #ff7790; --neutral: #93a5a2;
-      --ok-bg: #1d2e14; --warn-bg: #36240f; --bad-bg: #3d1520; --neutral-bg: #1f2e2c;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
-      color-scheme: dark;
-    }
   }
   :root[data-theme="dark"] {
     --bg: #0f1a19; --card: #172625; --text: #e6f2f0; --muted: #9bb5b1; --line: #2a3d3b;

@@ -1,7 +1,7 @@
 # DermEdge band firmware (ESP-IDF)
 
 The wrist band: scratch detection from the ADXL345, a touch pad for start/stop, the 1.8" ST7735
-screen in the website's petal and sage palette, and a Bluetooth LE link to the DermEdge website,
+screen in the website's old pink palette (moving to the site's teal), and a Bluetooth LE link to the DermEdge website,
 which relays readings to the laptop hub (`app/band.py`).
 
 ```

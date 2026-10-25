@@ -348,11 +348,11 @@ def report():
         '<p class="muted">Not enough check-ins yet to suggest triggers.</p>'
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>DermEdge report</title>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
-<style>body{{font-family:Figtree,-apple-system,Segoe UI,sans-serif;margin:32px;color:#3a1f2b;background:#fff}}
-h1,h2{{font-family:"Young Serif",Georgia,serif;font-weight:400;color:#8e2a57}}h1{{margin:0 0 4px}}
-.muted{{color:#8b6474}}table{{border-collapse:collapse;width:100%;margin-top:16px}}
-th{{color:#8b6474;font-weight:600}}td,th{{border-bottom:1px solid #f4d4df;padding:8px;text-align:left;vertical-align:top;font-size:14px}}
-img{{height:90px;border-radius:10px;margin-right:6px}}.note{{margin-top:24px;font-size:12px;color:#8b6474}}</style>
+<style>body{{font-family:Figtree,-apple-system,Segoe UI,sans-serif;margin:32px;color:#1d2b2a;background:#fff}}
+h1,h2{{font-family:"Young Serif",Georgia,serif;font-weight:400;color:#134e4a}}h1{{margin:0 0 4px}}
+.muted{{color:#5c6f6c}}table{{border-collapse:collapse;width:100%;margin-top:16px}}
+th{{color:#5c6f6c;font-weight:600}}td,th{{border-bottom:1px solid #d9e6e3;padding:8px;text-align:left;vertical-align:top;font-size:14px}}
+img{{height:90px;border-radius:10px;margin-right:6px}}.note{{margin-top:24px;font-size:12px;color:#5c6f6c}}</style>
 </head><body><h1>DermEdge &middot; skin history report</h1>
 <div class="muted">Generated {time.strftime('%d %b %Y %H:%M')} - {len(items)} checks - current triggers: {escape(trig_txt)}</div>
 <table><tr><th>When</th><th>Body site</th><th>Photo / heatmap</th><th>Result</th><th>Severity</th><th>Flare risk</th></tr>

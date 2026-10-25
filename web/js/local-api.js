@@ -449,9 +449,9 @@
     const insHtml = ins.insights.length ? '<ul>' + ins.insights.map(i => `<li>${esc(i.trigger)}: average severity ${i.mean_with} when present vs ${i.mean_without} when absent (${i.n_with} vs ${i.n_without} checks)</li>`).join('') + '</ul>'
       : '<p class="muted">Not enough check-ins yet to suggest triggers.</p>';
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>DermEdge report</title><link rel="stylesheet" href="${location.origin}/static/fonts/fonts.css">
-<style>body{font-family:Figtree,-apple-system,Segoe UI,sans-serif;margin:32px;color:#3a1f2b;background:#fff}h1,h2{font-family:"Young Serif",Georgia,serif;font-weight:400;color:#8e2a57}
-.muted{color:#8b6474}table{border-collapse:collapse;width:100%;margin-top:16px}th{color:#8b6474;font-weight:600}td,th{border-bottom:1px solid #f4d4df;padding:8px;text-align:left;vertical-align:top;font-size:14px}
-img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-size:12px;color:#8b6474}</style></head><body>
+<style>body{font-family:Figtree,-apple-system,Segoe UI,sans-serif;margin:32px;color:#1d2b2a;background:#fff}h1,h2{font-family:"Young Serif",Georgia,serif;font-weight:400;color:#134e4a}
+.muted{color:#5c6f6c}table{border-collapse:collapse;width:100%;margin-top:16px}th{color:#5c6f6c;font-weight:600}td,th{border-bottom:1px solid #d9e6e3;padding:8px;text-align:left;vertical-align:top;font-size:14px}
+img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-size:12px;color:#5c6f6c}</style></head><body>
 <h1>DermEdge &middot; skin history report</h1><div class="muted">Generated ${when(Date.now() / 1000)} - ${items.length} checks</div>
 <table><tr><th>When</th><th>Body site</th><th>Photo / heatmap</th><th>Result</th><th>Severity</th><th>Flare risk</th></tr>${rows || '<tr><td colspan=6>No checks yet.</td></tr>'}</table>
 <h2 style="margin-top:28px">Treatments</h2><table><tr><th>When</th><th>Treatment</th><th>Body site</th><th>Notes</th></tr>${trRows || '<tr><td colspan=4>None logged.</td></tr>'}</table>

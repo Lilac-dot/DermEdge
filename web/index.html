@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DermEdge</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='19' fill='%23fde3ed'/%3E%3Cpath d='M20 8c5 7 9 11.5 9 16.5a9 9 0 0 1-18 0C11 19.5 15 15 20 8z' fill='%23d63f7a'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='19' fill='%23dcefec'/%3E%3Cpath d='M20 8c5 7 9 11.5 9 16.5a9 9 0 0 1-18 0C11 19.5 15 15 20 8z' fill='%230f7c74'/%3E%3C/svg%3E">
 <!-- Installable app (PWA): manifest.webmanifest, and sw.js keeps it working offline -->
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#fff4f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1c0f15" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f8f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1a19" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="DermEdge">
@@ -21,33 +21,33 @@
 <script src="/js/local-api.js"></script>
 <script src="/js/band.js"></script>
 <style>
-  /* Layout: a blush page, white cards with a rose border, plum ink. Serif for names and numbers,
+  /* Layout: a pale cool page, white cards with a grey-teal border, teal headings. Serif for names and numbers,
      a rounded sans for everything else. Colours are tokens; dark mode swaps the tokens only. */
   :root {
-    --bg: #fff4f7; --card: #ffffff; --text: #3a1f2b; --muted: #8b6474; --line: #f4d4df;
-    --accent: #d63f7a; --accent-ink: #ffffff; --accent-soft: #fde3ed; --berry: #8e2a57;
-    --ok: #23885a; --warn: #c56a1a; --bad: #c92f4c; --neutral: #9a7a88;
-    --ok-bg: #e6f6ed; --warn-bg: #fff0e1; --bad-bg: #ffe6eb; --neutral-bg: #fcedf2;
-    --shadow: 0 1px 2px rgba(142, 42, 87, .06), 0 8px 24px rgba(214, 63, 122, .08);
+    --bg: #f4f8f7; --card: #ffffff; --text: #1d2b2a; --muted: #5c6f6c; --line: #d9e6e3;
+    --accent: #0f7c74; --accent-ink: #ffffff; --accent-soft: #dcefec; --deep: #134e4a;
+    --ok: #3a7d1f; --warn: #c56a1a; --bad: #c92f4c; --neutral: #7d8b89;
+    --ok-bg: #eaf5e1; --warn-bg: #fff0e1; --bad-bg: #ffe6eb; --neutral-bg: #eef2f1;
+    --shadow: 0 1px 2px rgba(19, 78, 74, .06), 0 8px 24px rgba(15, 124, 116, .08);
     --serif: "Young Serif", Georgia, "Times New Roman", serif;
     --sans: "Figtree", -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #1c0f15; --card: #29161f; --text: #f9e8ef; --muted: #c9a1b2; --line: #432532;
-      --accent: #ff78a9; --accent-ink: #2a0f1b; --accent-soft: #3d1a2a; --berry: #ffb3cd;
-      --ok: #62d29c; --warn: #ffaf63; --bad: #ff7790; --neutral: #b892a2;
-      --ok-bg: #16301f; --warn-bg: #36240f; --bad-bg: #3d1520; --neutral-bg: #331c27;
+      --bg: #0f1a19; --card: #172625; --text: #e6f2f0; --muted: #9bb5b1; --line: #2a3d3b;
+      --accent: #4fc3b6; --accent-ink: #062421; --accent-soft: #183a37; --deep: #8fd9cf;
+      --ok: #93d16b; --warn: #ffaf63; --bad: #ff7790; --neutral: #93a5a2;
+      --ok-bg: #1d2e14; --warn-bg: #36240f; --bad-bg: #3d1520; --neutral-bg: #1f2e2c;
       --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #1c0f15; --card: #29161f; --text: #f9e8ef; --muted: #c9a1b2; --line: #432532;
-    --accent: #ff78a9; --accent-ink: #2a0f1b; --accent-soft: #3d1a2a; --berry: #ffb3cd;
-    --ok: #62d29c; --warn: #ffaf63; --bad: #ff7790; --neutral: #b892a2;
-    --ok-bg: #16301f; --warn-bg: #36240f; --bad-bg: #3d1520; --neutral-bg: #331c27;
+    --bg: #0f1a19; --card: #172625; --text: #e6f2f0; --muted: #9bb5b1; --line: #2a3d3b;
+    --accent: #4fc3b6; --accent-ink: #062421; --accent-soft: #183a37; --deep: #8fd9cf;
+    --ok: #93d16b; --warn: #ffaf63; --bad: #ff7790; --neutral: #93a5a2;
+    --ok-bg: #1d2e14; --warn-bg: #36240f; --bad-bg: #3d1520; --neutral-bg: #1f2e2c;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
@@ -63,7 +63,7 @@
            backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand svg { width: 34px; height: 34px; flex: none; }
-  header h1 { font-size: 24px; margin: 0; color: var(--berry); letter-spacing: .01em; }
+  header h1 { font-size: 24px; margin: 0; color: var(--deep); letter-spacing: .01em; }
   header .tag { font-size: 12.5px; color: var(--muted); }
   nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; background: var(--card); padding: 4px;
         border-radius: 999px; border: 1px solid var(--line); }
@@ -77,22 +77,22 @@
   .grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
   @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); min-width: 0; }
-  .card h2 { font-size: 20px; margin: 0 0 14px; color: var(--berry); }
+  .card h2 { font-size: 20px; margin: 0 0 14px; color: var(--deep); }
   .muted { color: var(--muted); font-size: 13px; }
 
-  .cam { position: relative; border-radius: 16px; overflow: hidden; background: #1a0d13; aspect-ratio: 4/3; }
+  .cam { position: relative; border-radius: 16px; overflow: hidden; background: #0d1a19; aspect-ratio: 4/3; }
   .cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cam video.mirror { transform: scaleX(-1); }  /* only the selfie camera / webcam, so it moves like a mirror */
   .cam:not(.live) .box, .cam:not(.live) .scan { display: none; }  /* the target box only over a live picture */
   .flip { position: absolute; top: 10px; right: 10px; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
-          display: grid; place-items: center; background: rgba(30, 12, 20, .72); color: #fff; }
-  .flip:hover { background: rgba(30, 12, 20, .9); }
+          display: grid; place-items: center; background: rgba(10, 26, 25, .72); color: #fff; }
+  .flip:hover { background: rgba(10, 26, 25, .9); }
   .flip svg { width: 22px; height: 22px; }
   .narrow { display: none; }
   .cam .box { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 45%; aspect-ratio: 1;
-              border-radius: 18px; border: 2px dashed rgba(255, 255, 255, .85); box-shadow: 0 0 0 9999px rgba(40, 10, 24, .32); }
+              border-radius: 18px; border: 2px dashed rgba(255, 255, 255, .85); box-shadow: 0 0 0 9999px rgba(10, 30, 28, .32); }
   .badge { position: absolute; top: 12px; left: 12px; padding: 7px 14px; border-radius: 999px; font-weight: 700;
-           font-size: 16px; letter-spacing: .02em; background: rgba(30, 12, 20, .72); color: #fff; }
+           font-size: 16px; letter-spacing: .02em; background: rgba(10, 26, 25, .72); color: #fff; }
   .badge.rash { background: var(--bad); } .badge.normal { background: var(--ok); } .badge.warn { background: var(--warn); }
   .cam-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
              gap: 10px; padding: 20px; text-align: center; color: #fff; }
@@ -126,7 +126,7 @@
   .meter > div { height: 100%; border-radius: 999px; }
   .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; margin: 12px 0 5px; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .chip { font-size: 12px; padding: 4px 11px; border-radius: 999px; background: var(--accent-soft); color: var(--berry); }
+  .chip { font-size: 12px; padding: 4px 11px; border-radius: 999px; background: var(--accent-soft); color: var(--deep); }
   .chip.sample { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
   .empty { text-align: center; color: var(--muted); padding: 44px 12px; }
   .empty::before { content: ""; display: block; width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%;
@@ -140,7 +140,7 @@
        background: var(--bg); color: var(--text); font-size: 14px; }
   input[type=range] { width: 100%; }
   .disclaimer { font-size: 12px; color: var(--muted); margin-top: 14px; }
-  .stat { font-size: 34px; color: var(--berry); }
+  .stat { font-size: 34px; color: var(--deep); }
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 14px; }
   .tiles:empty { display: none; }  /* no gap where there's nothing to show yet */
   .tile { background: var(--neutral-bg); border-radius: 16px; padding: 12px 14px; }
@@ -190,14 +190,14 @@
   .modal.wide { width: min(880px, 100%); }
   .sensor-note { font-size: 13px; color: var(--muted); margin-top: 8px; }
   .insight { padding: 12px 14px; border-radius: 16px; background: var(--neutral-bg); margin-top: 10px; font-size: 14px; }
-  .insight b { color: var(--berry); }
+  .insight b { color: var(--deep); }
 
   /* about: how DermEdge helps, limits, your data */
   a { color: var(--accent); }
   .lead { font-size: 16px; margin: 0; max-width: 70ch; }
   .points { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
   .point { background: var(--neutral-bg); border-radius: 16px; padding: 14px 16px; font-size: 14px; }
-  .point h3 { font-size: 17px; margin: 0 0 4px; color: var(--berry); }
+  .point h3 { font-size: 17px; margin: 0 0 4px; color: var(--deep); }
   .privacy li span { display: block; color: var(--muted); font-size: 13px; }
   .btn.danger { color: var(--bad); border-color: var(--bad); }
   .btn.danger:hover { background: var(--bad-bg); }
@@ -206,17 +206,17 @@
 
   /* onboarding */
   .overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px;
-             background: rgba(40, 10, 24, .45); backdrop-filter: blur(4px); }
+             background: rgba(10, 30, 28, .45); backdrop-filter: blur(4px); }
   .modal { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--card);
-           border-radius: 24px; padding: 26px; box-shadow: 0 20px 60px rgba(40, 10, 24, .35); }
-  .modal h2 { font-family: var(--serif); font-weight: 400; color: var(--berry); font-size: 26px; margin: 0 0 6px; }
+           border-radius: 24px; padding: 26px; box-shadow: 0 20px 60px rgba(10, 30, 28, .35); }
+  .modal h2 { font-family: var(--serif); font-weight: 400; color: var(--deep); font-size: 26px; margin: 0 0 6px; }
   .modal .stepdots { display: flex; gap: 6px; margin-bottom: 16px; }
   .modal .stepdots i { width: 26px; height: 5px; border-radius: 999px; background: var(--line); }
   .modal .stepdots i.on { background: var(--accent); }
   .pick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .pick button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px;
                  padding: 7px 14px; cursor: pointer; font-size: 14px; }
-  .pick button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--berry); font-weight: 600; }
+  .pick button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--deep); font-weight: 600; }
   .modal .actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 22px; }
   .privacy { list-style: none; padding: 0; margin: 14px 0; display: grid; gap: 8px; font-size: 14px; }
   .privacy li { padding-left: 26px; position: relative; }
@@ -468,7 +468,7 @@
       <div class="card">
         <h2>Current triggers</h2>
         <div class="row"><span>Trigger index (noisy-OR of all triggers)</span><b id="tIndex">0.00</b></div>
-        <div class="meter"><div id="tIndexBar" style="width:0;background:var(--warn)"></div></div>
+        <div class="meter"><div id="tIndexBar" style="width:0;background:var(--accent)"></div></div>
         <div id="alertBox2"></div>
         <div id="tList"></div>
         <div class="disclaimer">Flare risk = image score × trigger index, so it stays near zero without active eczema.</div>
@@ -832,7 +832,7 @@ async function loadHistory() {
       { label: "Flare risk (0–1)", data: pts.map(x => ({ x: x.ts * 1000, y: x.flare ? x.flare.risk : 0 })),
         borderColor: css("--warn"), backgroundColor: css("--warn"), yAxisID: "y1", tension: .3, borderDash: [5, 4], pointRadius: 3 },
       { type: "scatter", label: "Treatment", data: tx.map(t => ({ x: t.ts * 1000, y: 0.4, kind: t.kind })),
-        yAxisID: "y", pointStyle: "triangle", pointRadius: 7, backgroundColor: css("--berry"), borderColor: css("--berry") },
+        yAxisID: "y", pointStyle: "triangle", pointRadius: 7, backgroundColor: css("--deep"), borderColor: css("--deep") },
     ],
   };
   const grid = { color: css("--line") }, ticks = { color: css("--muted"), font: { family: "Figtree" } };
@@ -946,7 +946,7 @@ function renderState(s) {
   ].join("");
   const pts = s.wearable.series;
   const data = { labels: pts.map(p => new Date(p.t * 1000).toLocaleTimeString()),
-    datasets: [{ label: "Stress model output", data: pts.map(p => p.stress), borderColor: css("--warn"), backgroundColor: css("--warn"), tension: .3, pointRadius: 0 }] };
+    datasets: [{ label: "Stress model output", data: pts.map(p => p.stress), borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .3, pointRadius: 0 }] };
   if (!stressChart) {
     stressChart = new Chart($("stressChart"), { type: "line", data, options: { animation: false, maintainAspectRatio: false,
       plugins: { legend: { labels: { color: css("--text") } } },
@@ -958,7 +958,7 @@ function renderState(s) {
   $("tIndex").textContent = s.trigger_index.toFixed(2);
   $("tIndexBar").style.width = (s.trigger_index * 100) + "%";
   $("tList").innerHTML = Object.entries(s.triggers).map(([k, v]) => `<div class="row"><span>${k}</span><b>${v.toFixed(2)}</b></div>
-    <div class="meter"><div style="width:${v * 100}%;background:var(--warn)"></div></div>`).join("") ||
+    <div class="meter"><div style="width:${v * 100}%;background:var(--accent)"></div></div>`).join("") ||
     '<div class="muted" style="margin-top:10px">No triggers yet.</div>';
 }
 // ---------- the band (js/band.js) ----------
@@ -1057,7 +1057,7 @@ function renderBandSensorCard(bs) {
     { label: "Skin conductance (µS)", data: pts.map(p => ({ x: p.t * 1000, y: p.gsr })), yAxisID: "y",
       borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .3, pointRadius: 0 },
     { label: "Stress model output", data: pts.filter(p => p.stress != null).map(p => ({ x: p.t * 1000, y: p.stress })), yAxisID: "y1",
-      borderColor: css("--warn"), backgroundColor: css("--warn"), borderDash: [5, 4], tension: .3, pointRadius: 0 },
+      borderColor: css("--deep"), backgroundColor: css("--deep"), borderDash: [5, 4], tension: .3, pointRadius: 0 },
   ];
   if (!bandSensorChart) bandSensorChart = timeChart($("bandSensorChart"), datasets, { y: { title: "µS" }, y1: { position: "right", min: 0, max: 1 } });
   else { bandSensorChart.data.datasets = datasets; bandSensorChart.update(); }
@@ -1088,7 +1088,7 @@ async function openSession(id) {
     `${s.scratch_count} scratch episode${s.scratch_count === 1 ? "" : "s"}${s.stopped_at ? "" : " · still recording"}`;
   const body = $("svBody"); body.innerHTML = "";
   const section = title => {
-    const h = document.createElement("h3"); h.textContent = title; h.style.cssText = "font-size:17px;margin:18px 0 6px;color:var(--berry)";
+    const h = document.createElement("h3"); h.textContent = title; h.style.cssText = "font-size:17px;margin:18px 0 6px;color:var(--deep)";
     const wrap = document.createElement("div"); wrap.style.cssText = "position:relative;height:200px";
     const c = document.createElement("canvas"); wrap.appendChild(c); body.append(h, wrap);
     return c;
@@ -1103,8 +1103,8 @@ async function openSession(id) {
   if (s.gsr.length || s.skin_temp.length) svCharts.push(timeChart(section("Skin conductance and temperature"), [
     { label: "Skin conductance (µS)", data: thin(xy(s.gsr, r => r.microsiemens)), yAxisID: "y", borderColor: css("--accent"),
       backgroundColor: css("--accent"), tension: .2, pointRadius: 0 },
-    { label: "Skin temperature (°C)", data: thin(xy(s.skin_temp, r => r.c)), yAxisID: "y1", borderColor: css("--warn"),
-      backgroundColor: css("--warn"), borderDash: [5, 4], tension: .2, pointRadius: 0 },
+    { label: "Skin temperature (°C)", data: thin(xy(s.skin_temp, r => r.c)), yAxisID: "y1", borderColor: css("--deep"),
+      backgroundColor: css("--deep"), borderDash: [5, 4], tension: .2, pointRadius: 0 },
   ], { y: { title: "µS" }, y1: { position: "right", title: "°C" } }));
   const moist = s.moisture.filter(m => m.reference > 0);
   if (moist.length) svCharts.push(timeChart(section("Hydration deficit: eczema patch vs healthy skin"), [

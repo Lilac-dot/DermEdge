@@ -156,11 +156,14 @@ session already stopped), 422 (bad input).
 ## Design
 
 Match the website (`web/index.html`): titles in **Young Serif**, text in **Figtree** (both in
-`web/static/fonts`, SIL Open Font License). Light theme: background petal `#F9DDD8`, cards
-`#FFFAF9`, sage `#A7B59E`, text `#33302B`, muted `#6B5F5A`, alerts `#C92F4C`, good `#23885A`.
-The band's screen uses a much deeper version (rose `#D84A78`, pink card `#F6B3C6`, deep green
-`#1F551A`) because its panel washes pastels out; its screens are in
-`firmware_dermedge/band/test/preview.png`.
+`web/static/fonts`, SIL Open Font License). Light theme: background `#F4F8F7`, cards `#FFFFFF`,
+teal accent `#0F7C74` (white text on it), soft accent `#DCEFEC`, headings `#134E4A`, text
+`#1D2B2A`, muted `#5C6F6C`, lines `#D9E6E3`, alerts `#C92F4C`, good `#3A7D1F`. Keep pink and red
+for alerts only, since the skin photos themselves are pink. The full light and dark token sets
+are at the top of `web/index.html`.
+The band's screen still uses the old pink palette (rose `#D84A78`, pink card `#F6B3C6`, deep
+green `#1F551A`) and is due to move to a deeper teal, since its panel washes pastels out; its
+screens are in `firmware_dermedge/band/test/preview.png`.
 
 ## Known limits and what's coming
 

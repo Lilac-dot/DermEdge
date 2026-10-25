@@ -2,8 +2,11 @@
 Records labelled 800 Hz accelerometer clips from the band over USB, for tools/tune.py.
 
     python3 tools/record.py check              # 10 s: sample rate, dropped samples, noise floor
-    python3 tools/record.py session            # guided: each activity for 20 s, two rounds
-    python3 tools/record.py session --into 20261025-2104 --only fingers,waving --rounds 1,2   # redo some
+    python3 tools/record.py session --person P03 --hand right   # guided: 8 activities x 20 s, twice
+    python3 tools/record.py session --person P03 --into P03_20261026-1500 --only fingers,waving   # redo some
+
+--person is an anonymous ID (P01, P02, ...), never a name: keep the ID-to-name list on paper or
+not at all. tools/tune.py tests on each person with a model trained on everyone else.
 
 Wear the add-on board on the back of the hand you scratch with. The band streams raw samples
 while this runs ("raw on" on its serial line) and keeps working normally otherwise. Clips go to
@@ -165,8 +168,8 @@ def check(band):
     print(f"  high-frequency floor: {np.mean(hp ** 2) / 2:.1e} g^2 (the rule's vibration threshold is 1e-4)")
 
 
-def session(band, rounds, seconds, into=None, only=None):
-    out = RECORDINGS / (into or datetime.now().strftime("%Y%m%d-%H%M"))
+def session(band, rounds, seconds, person, hand, into=None, only=None):
+    out = RECORDINGS / (into or f"{person}_{datetime.now().strftime('%Y%m%d-%H%M')}")
     out.mkdir(parents=True, exist_ok=True)
     acts = [a for a in ACTIVITIES if not only or a[0] in only]
     print(f"Saving to {out}\nWear the board on the BACK of the hand you scratch with, same way round every time.\n")
@@ -187,7 +190,7 @@ def session(band, rounds, seconds, into=None, only=None):
                 if again != "r":
                     break
             np.savez_compressed(out / f"{name}_{rnd}.npz", xyz=x, fs=FS, lsb_per_g=LSB_PER_G, label=name,
-                                scratch=scratch, dropouts=lost, recorded=time.time())
+                                scratch=scratch, dropouts=lost, recorded=time.time(), person=person, hand=hand)
     print(f"\nAll done: {len(acts) * len(rounds)} clips in {out}. Next: python3 tools/tune.py")
 
 
@@ -199,14 +202,22 @@ def main():
     ap.add_argument("--seconds", type=int, default=20)
     ap.add_argument("--into", help="an existing session folder name, to redo clips in it")
     ap.add_argument("--only", help="comma-separated activities to record, e.g. fingers,waving")
+    ap.add_argument("--person", help="anonymous ID like P03 (session only; never a name)")
+    ap.add_argument("--hand", choices=["right", "left"], help="the hand wearing the board (session only)")
     a = ap.parse_args()
+    if a.mode == "session":
+        import re
+        if not (a.person and re.fullmatch(r"P\d{2,3}", a.person)):
+            sys.exit("Give an anonymous ID: --person P01, P02, ... (not a name)")
+        if not a.hand:
+            sys.exit("Say which hand wears the board: --hand right or --hand left")
     band = Band(a.port)
     try:
         band.start()
         if a.mode == "check":
             check(band)
         else:
-            session(band, [int(r) for r in a.rounds.split(",")], a.seconds, a.into, a.only and a.only.split(","))
+            session(band, [int(r) for r in a.rounds.split(",")], a.seconds, a.person, a.hand, a.into, a.only and a.only.split(","))
     finally:
         band.stop()
 

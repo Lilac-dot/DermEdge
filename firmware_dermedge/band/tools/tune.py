@@ -10,6 +10,10 @@ features only, threshold 0.7, an episode ends after 4 calm seconds. That found 4
 with 0 false episodes in the 12 others, tested on the round it didn't see. Vibration added
 nothing there: at 800 Hz the ADXL345's noise (14-22 mg) buries the skin vibration.
 
+With recordings from two or more people (record.py --person), each person is tested with a
+model trained on everyone else: the honest number for someone new. With one person, the test is
+the round the model didn't see.
+
 Features come from tools/replay.c, which runs the band's own main/scratch.c on each clip, so the
 model sees exactly what the band computes. The first 3 s of every clip are dropped (the detector
 needs 2 s to fill, and nobody starts on the word GO). Only summaries are written to the model
@@ -62,11 +66,13 @@ def load(sessions, exe):
         out = subprocess.run([str(exe)], input=z["xyz"].astype("<i2").tobytes(), capture_output=True, check=True).stdout
         lines = out.decode().strip().splitlines()[1:]
         name, rnd = f.stem.rsplit("_", 1)
+        # sessions from record.py --person carry the ID; older ones count as their own person
+        person = str(z["person"]) if "person" in z.files else f.parent.name.split("_")[0]
         for line in lines:
             v = [float(x) for x in line.split(",")]
             if v[0] < SKIP_S:
                 continue
-            rows.append(dict(clip=f"{f.parent.name}/{f.stem}", activity=name, round=int(rnd), y=int(z["scratch"]),
+            rows.append(dict(clip=f"{f.parent.name}/{f.stem}", activity=name, round=int(rnd), person=person, y=int(z["scratch"]),
                              t=v[0], rule=int(v[2]), f=np.array(v[5:])))
     return rows
 
@@ -94,14 +100,19 @@ def fit(X, y):
     return sc, m
 
 
+def split_key(rows):
+    """Leave one person out when there are several people, else leave one round out."""
+    return "person" if len({r["person"] for r in rows}) > 1 else "round"
+
+
 def evaluate(rows, cols):
-    """Train on one round, test on the other, both ways. Returns test-set predictions."""
+    """Train without each group (person or round) and test on it. Returns test-set predictions."""
     idx = [FEATURES.index(c) for c in cols]
     pred = {}
-    rounds = sorted({r["round"] for r in rows})
-    for test in rounds:
-        tr = [r for r in rows if r["round"] != test]
-        te = [r for r in rows if r["round"] == test]
+    key = split_key(rows)
+    for test in sorted({r[key] for r in rows}):
+        tr = [r for r in rows if r[key] != test]
+        te = [r for r in rows if r[key] == test]
         sc, m = fit(np.array([r["f"][idx] for r in tr]), np.array([r["y"] for r in tr]))
         p = m.predict_proba(sc.transform(np.array([r["f"][idx] for r in te])))[:, 1]
         for r, pi in zip(te, p):
@@ -174,12 +185,29 @@ def main():
     sessions = [Path(s) if Path(s).is_absolute() else RECORDINGS / s for s in a.sessions] or sorted(p for p in RECORDINGS.iterdir() if p.is_dir())
     with tempfile.TemporaryDirectory() as tmp:
         rows = load(sessions, build_replay(tmp))
+    people = sorted({r["person"] for r in rows})
+    how = (f"each of {len(people)} people tested with a model trained on the others" if split_key(rows) == "person"
+           else "trained on one round, tested on the other (record more people for a per-person test)")
     print(f"{len(rows)} one-second windows from {len({r['clip'] for r in rows})} clips, "
-          f"{sum(r['y'] for r in rows)} of them scratching; trained on one round, tested on the other")
-    report(rows, {id(r): r["rule"] for r in rows}, "Hand-set rule (what the band runs now)")
+          f"{sum(r['y'] for r in rows)} of them scratching; {how}")
+    report(rows, {id(r): r["rule"] for r in rows}, "Hand-set rule (the band's fallback before training)")
     for name, cols in SETS.items():
         p = evaluate(rows, cols)
         report(rows, {k: v >= a.threshold for k, v in p.items()}, f"Model, {name}")
+    if split_key(rows) == "person":
+        p = evaluate(rows, SETS[a.features])
+        print(f"\nPer person ({a.features}, threshold {a.threshold}), tested with a model that never saw them:")
+        for who in people:
+            rs = [r for r in rows if r["person"] == who]
+            found = missed = false = 0
+            for c in sorted({r["clip"] for r in rs}):
+                e = episodes([p[id(r)] >= a.threshold for r in rs if r["clip"] == c])
+                y = next(r["y"] for r in rs if r["clip"] == c)
+                if y:
+                    found, missed = found + (e > 0), missed + (e == 0)
+                else:
+                    false += e
+            print(f"  {who}: scratch clips found {found}/{found + missed}, false episodes {false}")
     if a.write:
         write_model(rows, SETS[a.features], a.threshold)
 

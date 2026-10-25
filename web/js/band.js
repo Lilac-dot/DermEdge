@@ -214,7 +214,10 @@
 
   function command(text) {
     if (!ch.cmd || !device || !device.gatt.connected) return Promise.reject(new Error('The band is not connected'));
-    return op(() => ch.cmd.writeValueWithResponse(enc.encode(text)));
+    // writeValue is the older name for the same write-with-response; some Web Bluetooth browsers
+    // (Bluefy on iPhone) may only have that one
+    const c = ch.cmd;
+    return op(() => (c.writeValueWithResponse ? c.writeValueWithResponse(enc.encode(text)) : c.writeValue(enc.encode(text))));
   }
 
   window.DermBand = {

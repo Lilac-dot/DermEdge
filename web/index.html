@@ -81,7 +81,14 @@
   .muted { color: var(--muted); font-size: 13px; }
 
   .cam { position: relative; border-radius: 16px; overflow: hidden; background: #1a0d13; aspect-ratio: 4/3; }
-  .cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cam video.mirror { transform: scaleX(-1); }  /* only the selfie camera / webcam, so it moves like a mirror */
+  .cam:not(.live) .box, .cam:not(.live) .scan { display: none; }  /* the target box only over a live picture */
+  .flip { position: absolute; top: 10px; right: 10px; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
+          display: grid; place-items: center; background: rgba(30, 12, 20, .72); color: #fff; }
+  .flip:hover { background: rgba(30, 12, 20, .9); }
+  .flip svg { width: 22px; height: 22px; }
+  .narrow { display: none; }
   .cam .box { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 45%; aspect-ratio: 1;
               border-radius: 18px; border: 2px dashed rgba(255, 255, 255, .85); box-shadow: 0 0 0 9999px rgba(40, 10, 24, .32); }
   .badge { position: absolute; top: 12px; left: 12px; padding: 7px 14px; border-radius: 999px; font-weight: 700;
@@ -135,6 +142,7 @@
   .disclaimer { font-size: 12px; color: var(--muted); margin-top: 14px; }
   .stat { font-size: 34px; color: var(--berry); }
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 14px; }
+  .tiles:empty { display: none; }  /* no gap where there's nothing to show yet */
   .tile { background: var(--neutral-bg); border-radius: 16px; padding: 12px 14px; }
   .tile .k { font-size: 12px; color: var(--muted); } .tile .v { font-size: 24px; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .tile .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
@@ -216,6 +224,24 @@
   .scan { position: absolute; left: 50%; top: 50%; width: 45%; aspect-ratio: 1; transform: translate(-50%, -50%);
           border-radius: 18px; overflow: hidden; pointer-events: none; }
 
+  /* Phones: a compact header with one swipeable row of tabs, and a square camera with a bigger target box */
+  @media (max-width: 700px) {
+    header { gap: 6px 12px; padding: 10px 16px 0; }
+    .brand svg { width: 30px; height: 30px; }
+    header h1 { font-size: 21px; }
+    header .tag { font-size: 12px; }
+    .wide { display: none; } .narrow { display: inline; }
+    nav { flex: 0 0 calc(100% + 32px); margin: 0 -16px; padding: 4px 16px 10px; gap: 6px; flex-wrap: nowrap; overflow-x: auto;
+          background: none; border: 0; border-radius: 0; scrollbar-width: none; scroll-padding-inline: 16px; }
+    nav::-webkit-scrollbar { display: none; }
+    nav button { flex: none; white-space: nowrap; padding: 7px 14px; background: var(--card); border: 1px solid var(--line); }
+    nav button.on { border-color: var(--accent); }
+    main { padding-top: 16px; }
+    .card { padding: 16px; }
+    .cam { aspect-ratio: 1; }
+    .cam .box, .scan { width: 62%; }
+  }
+
   /* Motion: only for people who haven't asked their system for reduced motion. */
   @media (prefers-reduced-motion: no-preference) {
     @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -256,14 +282,14 @@
       <path d="M20 8c5 7 9 11.5 9 16.5a9 9 0 0 1-18 0C11 19.5 15 15 20 8z" fill="var(--accent)"/>
       <path d="M16 25.5a4.5 4.5 0 0 0 4.5 4" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" fill="none"/>
     </svg>
-    <div><h1>DermEdge</h1><div class="tag">Runs entirely in your browser · photos never leave this device</div></div>
+    <div><h1>DermEdge</h1><div class="tag"><span class="wide">Runs entirely in your browser · photos</span><span class="narrow">Photos</span> never leave this device</div></div>
   </div>
   <nav>
     <button data-tab="home" class="on">Home</button>
     <button data-tab="check">Check</button>
     <button data-tab="history">History</button>
-    <button data-tab="triggers">Wearable &amp; care</button>
-    <button data-tab="report">Doctor report</button>
+    <button data-tab="triggers"><span class="wide">Wearable &amp; care</span><span class="narrow">Wearable</span></button>
+    <button data-tab="report"><span class="wide">Doctor report</span><span class="narrow">Report</span></button>
     <button data-tab="about">About</button>
   </nav>
 </header>
@@ -309,7 +335,7 @@
         </div>
         <div id="bandAlert"></div>
         <div class="band-note" id="bandError" hidden></div>
-        <div class="disclaimer" id="bandSupport">Needs Chrome or Edge on a computer or Android phone (not Safari or iPhone). You can also start and stop by holding the band's touch pad for 2 seconds. Readings stay in this browser.</div>
+        <div class="disclaimer" id="bandSupport">Needs Chrome or Edge on a computer or Android phone, or the Bluefy browser on iPhone. You can also start and stop by holding the band's touch pad for 2 seconds. Readings stay in this browser.</div>
       </div>
       <div class="card">
         <h2>Check your skin</h2>
@@ -325,12 +351,18 @@
   <section class="tab" id="tab-check">
     <div class="grid">
       <div class="card">
-        <h2>Live camera · stage 1: normal vs rash</h2>
-        <div class="cam">
+        <h2>Live camera<span class="wide"> · stage 1: normal vs rash</span></h2>
+        <div class="cam" id="cam">
           <video id="video" autoplay playsinline muted></video>
-          <div class="box"></div>
+          <div class="box" id="camBox"></div>
           <div class="scan" id="scan" hidden></div>
           <div class="badge" id="badge" hidden>Camera off</div>
+          <button class="flip" id="camFlip" hidden aria-label="Switch between front and back camera" title="Switch camera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 7h-3.2l-1.6-2.4A1.5 1.5 0 0 0 13.9 4h-3.8a1.5 1.5 0 0 0-1.3.6L7.2 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+              <path d="M9 13.5a3 3 0 0 1 5.2-2"/><path d="M15 12.5a3 3 0 0 1-5.2 2"/><path d="M14.4 9.3v2.3h-2.3"/><path d="M9.6 16.7v-2.3h2.3"/>
+            </svg>
+          </button>
           <div class="cam-off" id="camOff">
             <button class="btn primary" id="camStart">Turn on camera</button>
             <p>The camera only runs while you use it here, and frames never leave this device.</p>
@@ -575,6 +607,7 @@ let rashStreak = 0, lastAnalyse = 0, busy = false, chart;
 // tabs
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  b.scrollIntoView({ block: "nearest", inline: "nearest" });  // on phones the tab row scrolls sideways
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === "tab-" + b.dataset.tab));
   if (b.dataset.tab === "history" || b.dataset.tab === "report") loadHistory();
   if (b.dataset.tab === "report") loadFairness();
@@ -591,11 +624,20 @@ document.querySelectorAll("[data-goto]").forEach(a => a.onclick = e => {
 const video = $("video");
 // The camera never starts on its own: only from "Turn on camera", and it stops when the user
 // turns it off or leaves the Check tab, so the browser's camera light means someone asked for it.
+// Phones open the back camera, which photographs skin better; the flip button switches cameras.
+let facing = "environment";
+async function openStream() {
+  video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+  // mirror only a camera that faces the user; laptop webcams usually report no facing mode
+  video.classList.toggle("mirror", video.srcObject.getVideoTracks()[0].getSettings().facingMode !== "environment");
+}
 async function startCamera() {
   $("camStart").disabled = true;
   try {
-    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    await openStream();
+    $("cam").classList.add("live");
     $("camOff").hidden = true; $("camStop").hidden = false;
+    $("camFlip").hidden = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput").length < 2;
     const b = $("badge"); b.hidden = false; b.className = "badge"; b.textContent = "Looking…";
     $("camNote").textContent = "Hold the skin inside the white box, 10–15 cm away.";
     loop();
@@ -609,17 +651,28 @@ function stopCamera() {
   if (!video.srcObject) return;
   video.srcObject.getTracks().forEach(t => t.stop());
   video.srcObject = null;
-  $("badge").hidden = true; $("camOff").hidden = false; $("camStop").hidden = true;
+  $("cam").classList.remove("live");
+  $("badge").hidden = true; $("camOff").hidden = false; $("camStop").hidden = true; $("camFlip").hidden = true;
   rashStreak = 0;
 }
 $("camStart").onclick = startCamera;
 $("camStop").onclick = stopCamera;
+$("camFlip").onclick = async () => {
+  facing = facing === "environment" ? "user" : "environment";
+  $("camFlip").disabled = true; rashStreak = 0;
+  video.srcObject.getTracks().forEach(t => t.stop());  // many phones can't open both cameras at once
+  try { await openStream(); }
+  catch (e) { stopCamera(); $("camNote").textContent = "Couldn't switch camera. Turn it on again, or use Upload photo."; }
+  $("camFlip").disabled = false;
+};
 
 function crop(size) {
-  // the square under the on-screen box, un-mirrored. The box is 45% of the 4:3 frame's width,
-  // and object-fit: cover crops a wide webcam image to that 4:3 frame first.
-  const w = video.videoWidth, h = video.videoHeight;
-  const side = Math.min(Math.min(w, h * 4 / 3) * 0.45, h);
+  // the square under the on-screen box, un-mirrored. object-fit: cover shows the middle of the
+  // frame at the preview's shape (4:3 on wide screens, square on phones), and the box is a fixed
+  // share of the preview's width.
+  const w = video.videoWidth, h = video.videoHeight, cam = $("cam");
+  const aspect = cam.clientWidth / cam.clientHeight, visW = Math.min(w, h * aspect), visH = visW / aspect;
+  const side = Math.min(visW * $("camBox").offsetWidth / cam.clientWidth, visH);
   const c = document.createElement("canvas"); c.width = c.height = size;
   c.getContext("2d").drawImage(video, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
   return new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
@@ -939,7 +992,12 @@ function renderBand(b) {
     '<div class="controls"><button class="btn" id="bandDismiss">Dismiss alert</button></div>' : "";
   if (b.alert) $("bandDismiss").onclick = () => DermBand.dismissAlert();
   $("bandError").hidden = !b.error; $("bandError").textContent = b.error || "";
-  if (!b.supported) $("bandSupport").textContent = "This browser can't use Bluetooth. Open DermEdge in Chrome or Edge on a computer or Android phone.";
+  // iPhone and iPad browsers (Safari, and Chrome on iOS) have no Web Bluetooth; Bluefy adds it.
+  // iPadOS reports itself as a Mac, so a touch screen gives it away.
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (!b.supported) $("bandSupport").textContent = ios
+    ? "iPhone browsers can't use Bluetooth. To connect your band, install the free Bluefy browser from the App Store and open this page in it. The skin check works here as it is."
+    : "This browser can't use Bluetooth. Open DermEdge in Chrome or Edge on a computer or Android phone.";
   if (b.sessionsChanged !== bandSessionsSeen) { bandSessionsSeen = b.sessionsChanged; loadBandSessions(); }
   if (!on) { $("bandSensorTiles").innerHTML = ""; $("bandSensorNote").hidden = true; }
   else if (b.sensorsAt !== bandSensorsSeen) { bandSensorsSeen = b.sensorsAt; loadBandSensors(); }

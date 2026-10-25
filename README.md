@@ -8,9 +8,11 @@ DermEdge checks a photo of skin in three stages, tracks each body site over time
 
 Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the **Telemedicon 2026 AI & Digital Health Hackathon**, IIIT Sri City.
 
-| Check | History | Wearable & care |
-|---|---|---|
-| ![Live check: rash detected, eczema vs look-alikes, severity and heatmap](docs/check.jpg) | ![History: progress by body site and trigger insights](docs/history.jpg) | ![Wearable: stress, heart rate, hydration deficit and a flare alert](docs/wearable.jpg) |
+| Home | Check |
+|---|---|
+| ![Home: connect the DermEdge band, or open the skin check](docs/home.jpg) | ![Check: eczema found in an uploaded photo, with each stage, the severity and the heatmap](docs/check.jpg) |
+| **History** | **Wearable & care** |
+| ![History: progress by body site and trigger insights, from clearly labelled sample check-ins](docs/history.jpg) | ![Wearable and care: stress, skin conductance, hydration deficit and a flare alert](docs/wearable.jpg) |
 
 ## How it works
 

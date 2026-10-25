@@ -33,15 +33,43 @@ menu "DermEdge wristband"
                 LM35 flat side facing you: left pin (+Vs) to 5V/VIN -- it needs at least 4 V, so
                 not 3V3 -- middle pin (Vout) to the ADC pin, right pin to GND. Skin reads ~300-350
                 mV, well inside the ESP32's input range even with the sensor on 5V.
+        config DERMEDGE_TEMP_NTC
+            bool "NTC thermistor in a voltage divider on an ADC pin"
+            help
+                3V3 -> fixed resistor -> ADC pin -> thermistor -> GND. Warmer skin lowers the
+                thermistor's resistance and so the pin voltage (~1.4 V at 33 C with 10k parts).
     endchoice
 
     config DERMEDGE_TEMP_ADC_CHANNEL
-        int "LM35 ADC1 channel (7 = GPIO35)"
-        depends on DERMEDGE_TEMP_LM35
+        int "Temperature sensor ADC1 channel (7 = GPIO35)"
+        depends on DERMEDGE_TEMP_LM35 || DERMEDGE_TEMP_NTC
         default 7
         range 0 7
         help
             ADC1 only: ADC2 pins stop working while WiFi is on. Must differ from the GSR channel.
+
+    config DERMEDGE_NTC_R25
+        int "Thermistor resistance at 25 C (ohms)"
+        depends on DERMEDGE_TEMP_NTC
+        default 10000
+        help
+            The number printed on the part or in its listing: "10K NTC" = 10000.
+
+    config DERMEDGE_NTC_BETA
+        int "Thermistor B (beta) value"
+        depends on DERMEDGE_TEMP_NTC
+        default 3950
+        help
+            From the listing or datasheet, e.g. "B3950" or "B25/50 = 3950". 3950 and 3435 are
+            the common ones.
+
+    config DERMEDGE_NTC_SERIES_R
+        int "Fixed divider resistor (ohms)"
+        depends on DERMEDGE_TEMP_NTC
+        default 10000
+        help
+            The resistor between 3V3 and the ADC pin. Use the same value as the thermistor's
+            25 C resistance; measure it with a multimeter for a more accurate reading.
 
     choice DERMEDGE_MOISTURE_SOURCE
         prompt "Skin moisture patch source"

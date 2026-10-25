@@ -6,11 +6,14 @@
 #include "esp_log.h"
 #include "esp_random.h"
 
-#if defined(CONFIG_DERMEDGE_GSR_GROVE) || defined(CONFIG_DERMEDGE_TEMP_LM35)
+#if defined(CONFIG_DERMEDGE_TEMP_LM35) || defined(CONFIG_DERMEDGE_TEMP_NTC)
+#define USE_TEMP_ADC
+#endif
+#if defined(CONFIG_DERMEDGE_GSR_GROVE) || defined(USE_TEMP_ADC)
 #define USE_ADC1
 #include "esp_adc/adc_oneshot.h"
 #endif
-#ifdef CONFIG_DERMEDGE_TEMP_LM35
+#ifdef USE_TEMP_ADC
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #endif
@@ -44,9 +47,25 @@ static float approach(float *level, float target, float dt)
 #ifdef USE_ADC1
 static adc_oneshot_unit_handle_t s_adc;
 #endif
-#ifdef CONFIG_DERMEDGE_TEMP_LM35
+#ifdef USE_TEMP_ADC
 static adc_cali_handle_t s_temp_cali;
-#define LM35_READS 32  // averaged per 4 Hz sample
+#define TEMP_READS 32  // averaged per 4 Hz sample
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
+#define TEMP_SENSOR "LM35"
+// LM35 gives 10 mV per degree C, so skin (~30-35 C) is ~300-350 mV: 0 dB attenuation
+// (~100-950 mV) is the ESP32 ADC's most accurate range.
+#define TEMP_ATTEN ADC_ATTEN_DB_0
+#define TEMP_WIRING_HINT "+Vs on 5V, not 3V3"
+#else
+#define TEMP_SENSOR "thermistor"
+// The divider sits at ~1.1-2.0 V between 40 and 15 C with 10k parts, inside 12 dB's
+// accurate ~150-2450 mV.
+#define TEMP_ATTEN ADC_ATTEN_DB_12
+#define TEMP_WIRING_HINT "resistor from 3V3 to the pin, thermistor from the pin to GND"
+#define NTC_SUPPLY_MV 3300.0f  // the board's 3V3 rail; a 1% error shifts readings ~0.4 C
+#endif
+#else
+#define TEMP_SENSOR "simulated"
 #endif
 
 void signals_init(void)
@@ -59,20 +78,20 @@ void signals_init(void)
     adc_oneshot_chan_cfg_t ch = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_12};
     ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, CONFIG_DERMEDGE_GSR_ADC_CHANNEL, &ch));
 #endif
-#ifdef CONFIG_DERMEDGE_TEMP_LM35
-    // LM35 gives 10 mV per degree C, so skin (~30-35 C) is ~300-350 mV: 0 dB attenuation
-    // (~100-950 mV) is the ESP32 ADC's most accurate range. Line fitting converts raw readings
-    // to millivolts, using the chip's eFuse Vref or 1100 mV if none was burnt.
-    adc_oneshot_chan_cfg_t tch = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_0};
+#ifdef USE_TEMP_ADC
+    // Line fitting converts raw readings to millivolts, using the chip's eFuse Vref or 1100 mV
+    // if none was burnt.
+    adc_oneshot_chan_cfg_t tch = {.bitwidth = ADC_BITWIDTH_12, .atten = TEMP_ATTEN};
     ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, CONFIG_DERMEDGE_TEMP_ADC_CHANNEL, &tch));
-    adc_cali_line_fitting_config_t cali = {.unit_id = ADC_UNIT_1, .atten = ADC_ATTEN_DB_0,
+    adc_cali_line_fitting_config_t cali = {.unit_id = ADC_UNIT_1, .atten = TEMP_ATTEN,
                                            .bitwidth = ADC_BITWIDTH_12, .default_vref = 1100};
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali, &s_temp_cali));
     float c = signals_temp(0);
     if (c < 20.0f || c > 42.0f) {
-        ESP_LOGW(TAG, "LM35 reads %.1f C -- check the wiring (+Vs on 5V, not 3V3) and the ADC channel", c);
+        ESP_LOGW(TAG, "%s reads %.1f C -- check the wiring (%s) and the ADC channel",
+                 TEMP_SENSOR, c, TEMP_WIRING_HINT);
     } else {
-        ESP_LOGI(TAG, "LM35 reads %.1f C", c);
+        ESP_LOGI(TAG, "%s reads %.1f C", TEMP_SENSOR, c);
     }
 #endif
 #ifdef CONFIG_DERMEDGE_MOISTURE_TOUCH
@@ -84,7 +103,7 @@ void signals_init(void)
 #endif
     ESP_LOGI(TAG, "GSR %s, skin temperature %s, moisture patch %s",
              signals_gsr_simulated() ? "simulated" : "Grove module",
-             signals_temp_simulated() ? "simulated" : "LM35",
+             TEMP_SENSOR,
 #if defined(CONFIG_DERMEDGE_MOISTURE_TOUCH)
              "touch electrodes"
 #elif defined(CONFIG_DERMEDGE_MOISTURE_SIMULATED)
@@ -109,7 +128,7 @@ bool signals_gsr_simulated(void)
 
 bool signals_temp_simulated(void)
 {
-#ifdef CONFIG_DERMEDGE_TEMP_LM35
+#ifdef USE_TEMP_ADC
     return false;
 #else
     return true;
@@ -150,18 +169,29 @@ float signals_eda(float t)
 float signals_temp(float t)
 {
     (void)t;
-#ifdef CONFIG_DERMEDGE_TEMP_LM35
+#ifdef USE_TEMP_ADC
     // One ESP32 ADC read is noisy by a few mV (several tenths of a degree), as much as the
     // ~1 C calm/stress shift the model looks for, so average a burst of reads.
     int sum = 0;
-    for (int i = 0; i < LM35_READS; i++) {
+    for (int i = 0; i < TEMP_READS; i++) {
         int raw = 0;
         adc_oneshot_read(s_adc, CONFIG_DERMEDGE_TEMP_ADC_CHANNEL, &raw);
         sum += raw;
     }
     int mv = 0;
-    adc_cali_raw_to_voltage(s_temp_cali, sum / LM35_READS, &mv);
+    adc_cali_raw_to_voltage(s_temp_cali, sum / TEMP_READS, &mv);
+#ifdef CONFIG_DERMEDGE_TEMP_LM35
     return mv / 10.0f;  // 10 mV per degree C
+#else
+    if (mv <= 0 || mv >= NTC_SUPPLY_MV) {
+        return 0.0f;  // thermistor open or shorted; caught by the start-up range check
+    }
+    // Divider: thermistor R = series R * V / (supply - V). Beta equation:
+    // 1/T = 1/T25 + ln(R / R25) / B, with T in kelvin.
+    float r = (float)CONFIG_DERMEDGE_NTC_SERIES_R * mv / (NTC_SUPPLY_MV - mv);
+    float inv_t = 1.0f / 298.15f + logf(r / (float)CONFIG_DERMEDGE_NTC_R25) / (float)CONFIG_DERMEDGE_NTC_BETA;
+    return 1.0f / inv_t - 273.15f;
+#endif
 #else
     // No skin-temperature sensor configured, so this channel is simulated.
     static float level = TEMP_CALM;

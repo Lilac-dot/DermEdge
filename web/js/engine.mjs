@@ -14,7 +14,7 @@
 // check_web_clip_quantized.py); the ONNX ResNet18 matches PyTorch exactly.
 
 // Bump when a file in web/models changes, so browsers that cached the old copy fetch the new one
-// (also bump the two ?v= in local-api.js).
+// (also bump every ?v= in local-api.js).
 export const MODELS_V = 3;
 const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
 const CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073], CLIP_STD = [0.26862954, 0.26130258, 0.27577711];

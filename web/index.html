@@ -5,11 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DermEdge</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='19' fill='%23fde3ed'/%3E%3Cpath d='M20 8c5 7 9 11.5 9 16.5a9 9 0 0 1-18 0C11 19.5 15 15 20 8z' fill='%23d63f7a'/%3E%3C/svg%3E">
+<!-- Installable app (PWA): manifest.webmanifest, and sw.js keeps it working offline -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#fff4f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c0f15" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DermEdge">
 <link rel="stylesheet" href="/static/fonts/fonts.css">
 <script src="/static/chart.umd.min.js"></script>
 <!-- Browser version: the models run on this device (js/engine.mjs) and js/local-api.js answers the
      dashboard's /api calls locally, so no server is involved. -->
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js" crossorigin="anonymous"></script>
 <script src="/js/wearable-core.js"></script>
 <script src="/js/local-api.js"></script>
 <script src="/js/band.js"></script>
@@ -171,6 +178,9 @@
   .home-steps { margin: 10px 0 0; padding-left: 20px; font-size: 14px; } .home-steps li { margin: 4px 0; }
   .tx-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
   .tx-list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--neutral-bg); }
+  .tx-list li.open { cursor: pointer; } .tx-list li.open:hover { background: var(--accent-soft); }
+  .modal.wide { width: min(880px, 100%); }
+  .sensor-note { font-size: 13px; color: var(--muted); margin-top: 8px; }
   .insight { padding: 12px 14px; border-radius: 16px; background: var(--neutral-bg); margin-top: 10px; font-size: 14px; }
   .insight b { color: var(--berry); }
 
@@ -264,6 +274,10 @@
     <div class="card">
       <h2>Welcome to DermEdge</h2>
       <p class="lead">Connect your DermEdge band to track scratching, or check a patch of skin with your camera. Everything stays on this device.</p>
+      <div class="controls" id="installRow" hidden>
+        <button class="btn primary" id="installBtn">Install DermEdge</button>
+        <span class="muted">Adds it to your home screen and works offline once the skin model has loaded.</span>
+      </div>
     </div>
     <div class="grid" style="margin-top:20px">
       <div class="card">
@@ -278,6 +292,8 @@
         </ol>
         <div class="pair-box" id="bandPair" hidden><b>Enter the pairing code</b>Your computer is asking for the 6-digit code shown on the band's screen. Type it there to finish pairing.</div>
         <div class="tiles" id="bandTiles"></div>
+        <div class="tiles" id="bandSensorTiles"></div>
+        <div class="sensor-note" id="bandSensorNote" hidden></div>
         <div id="bandMove" hidden>
           <div class="row"><span id="bandMoveLabel">Movement</span><b id="bandMoveVal">–</b></div>
           <div class="meter"><div id="bandMoveBar" style="width:0;background:var(--sage, var(--accent))"></div></div>
@@ -390,6 +406,16 @@
 
   <!-- WEARABLE -->
   <section class="tab" id="tab-triggers">
+    <div class="card" id="bandSensorCard" style="margin-bottom:20px" hidden>
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+        <h2 style="margin:0">DermEdge band sensors</h2>
+        <span class="muted" id="bandSensorSource"></span>
+      </div>
+      <div class="tiles" id="bandSensorTiles2"></div>
+      <div style="position:relative;height:200px;margin-top:12px"><canvas id="bandSensorChart"></canvas></div>
+      <div class="disclaimer">Stress comes from skin conductance only, compared with your first 90 seconds of each recording, so sit still for that part.
+        Skin temperature is shown but not used for stress.</div>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
         <h2 style="margin:0">GSR wristband + skin moisture patch</h2>
@@ -493,8 +519,13 @@
           <span>On Fitzpatrick V–VI the screen caught 67% of rashes at the default setting and 83% once calibrated. See the Doctor report tab.</span></li>
         <li>Flare risk is a designed score, not yet clinically validated.
           <span>It multiplies the photo result by your triggers. Checking it against real flares needs a study over time.</span></li>
-        <li>The wristband is simulated in this browser version.
-          <span>The hardware firmware is built but hasn't been tested on real boards yet.</span></li>
+        <li>Band stress comes from skin conductance only, and misses some stress.
+          <span>Tested on 15 people (WESAD), each scored by a model trained on the other 14: right 90% of the time, caught 73% of stressful
+            periods, and worked poorly for 4 of the 15. It compares you with your first 90 seconds of each recording.</span></li>
+        <li>Scratch detection has been tested on one wearer so far.
+          <span>It found every scratch clip in a held-out round with no false episodes, but a model from one person's recordings isn't validated.</span></li>
+        <li>The simulated days in the Wearable tab are simulations.
+          <span>They show how triggers feed the flare risk, using generated signals, not anyone's real readings.</span></li>
       </ul>
     </div>
 
@@ -512,6 +543,18 @@
     </div>
   </section>
 </main>
+
+<div class="overlay" id="sessionView" hidden>
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="svTitle">
+    <h2 id="svTitle">Recording</h2>
+    <div class="muted" id="svSummary"></div>
+    <div id="svBody"></div>
+    <div class="actions">
+      <button class="btn" id="svCsv">Download CSV</button>
+      <button class="btn primary" id="svClose">Close</button>
+    </div>
+  </div>
+</div>
 
 <div class="overlay" id="onboard" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="obTitle">
@@ -834,11 +877,12 @@ function tile(k, v, sub) { return `<div class="tile"><div class="k">${k}</div><d
 function renderState(s) {
   const m = s.wearable.markers, sim = s.sim;
   document.querySelectorAll(".btn.sim").forEach(b => b.classList.toggle("on", b.dataset.s === (sim.scenario || "")));
-  $("simSource").textContent = sim.source || (s.wearable.updated ? "Live hardware" : sim.available === false ? sim.missing : "Hardware not connected. Pick a simulated day to replay recorded data.");
+  // the band's real readings have their own card above; these tiles are for a simulated day
+  $("simSource").textContent = sim.source || (sim.available === false ? sim.missing : "Pick a simulated day to see how triggers feed the flare risk.");
   document.querySelectorAll(".btn.sim").forEach(b => b.disabled = sim.available === false);
   $("simLabel").textContent = sim.label || "";
   const calib = m.calibration && m.calibration !== "done";
-  $("tiles").innerHTML = s.wearable.updated ? [
+  $("tiles").innerHTML = !sim.scenario ? (m.band_scratches != null ? tile("Band scratch episodes", m.band_scratches, "DermEdge band, last 8 h") : "") : [
     tile("Stress (GSR model)", calib ? "Calibrating" : level(m.stress_p), calib ? m.calibration : `model output ${m.stress_p ?? "–"}`),
     tile("Heart rate", m.heart_rate ? m.heart_rate + " bpm" : "–", "from PPG"),
     tile("Skin conductance", m.skin_conductance != null ? m.skin_conductance + " µS" : "–", "GSR / EDA"),
@@ -846,7 +890,7 @@ function renderState(s) {
     tile("Hydration deficit", m.hydration_deficit != null ? m.hydration_deficit + "%" : "–", "eczema patch vs healthy skin"),
     tile("Night scratches", m.night_scratches ?? 0, "IMU bursts (simulated)"),
     ...(m.band_scratches != null ? [tile("Band scratch episodes", m.band_scratches, "DermEdge band, last 8 h")] : []),
-  ].join("") : "";
+  ].join("");
   const pts = s.wearable.series;
   const data = { labels: pts.map(p => new Date(p.t * 1000).toLocaleTimeString()),
     datasets: [{ label: "Stress model output", data: pts.map(p => p.stress), borderColor: css("--warn"), backgroundColor: css("--warn"), tension: .3, pointRadius: 0 }] };
@@ -857,6 +901,7 @@ function renderState(s) {
                 y: { min: 0.1, max: 0.6, ticks: { color: css("--muted") }, grid: { color: css("--line") } } } } });
   } else { stressChart.data = data; stressChart.update(); }
   $("alertBox2").innerHTML = alertHtml(s.alerts);
+  renderBandSensorCard(s.band_sensors);
   $("tIndex").textContent = s.trigger_index.toFixed(2);
   $("tIndexBar").style.width = (s.trigger_index * 100) + "%";
   $("tList").innerHTML = Object.entries(s.triggers).map(([k, v]) => `<div class="row"><span>${k}</span><b>${v.toFixed(2)}</b></div>
@@ -896,15 +941,143 @@ function renderBand(b) {
   $("bandError").hidden = !b.error; $("bandError").textContent = b.error || "";
   if (!b.supported) $("bandSupport").textContent = "This browser can't use Bluetooth. Open DermEdge in Chrome or Edge on a computer or Android phone.";
   if (b.sessionsChanged !== bandSessionsSeen) { bandSessionsSeen = b.sessionsChanged; loadBandSessions(); }
+  if (!on) { $("bandSensorTiles").innerHTML = ""; $("bandSensorNote").hidden = true; }
+  else if (b.sensorsAt !== bandSensorsSeen) { bandSensorsSeen = b.sensorsAt; loadBandSensors(); }
 }
+
+// the band's own sensors (GSR, skin temperature, moisture), scored in js/local-api.js
+let bandSensorsSeen = 0, bandSensorChart;
+// the GSR model's threshold is 0.5 (stress_gsr.json); a calm wearer scores ~0.45
+function stressWord(p) { return p == null ? "–" : p < 0.5 ? "Calm" : p < 0.7 ? "Raised" : "High"; }
+function bandSensorTiles(bs) {
+  const m = bs.markers, calib = m.calibration && m.calibration !== "done", t = [];
+  if (m.skin_conductance != null) t.push(
+    tile("Stress (skin conductance)", calib ? "Calibrating" : stressWord(m.stress_p), calib ? m.calibration : `model output ${m.stress_p ?? "–"}`),
+    tile("Skin conductance", m.skin_conductance + " µS", "GSR"));
+  if (m.skin_temp != null) t.push(tile("Skin temperature", m.skin_temp + " °C", "shown only, not used for stress"));
+  if (m.hydration_deficit != null) t.push(tile("Hydration deficit", m.hydration_deficit + "%", "eczema patch vs healthy skin"));
+  return t.join("");
+}
+async function loadBandSensors() {
+  const bs = (await (await fetch("/api/state")).json()).band_sensors;
+  $("bandSensorTiles").innerHTML = bs.current ? bandSensorTiles(bs) : "";
+  const calib = bs.current && bs.markers.calibration && bs.markers.calibration !== "done";
+  $("bandSensorNote").hidden = !calib;
+  $("bandSensorNote").textContent = "Sit still for the first 90 seconds of the recording, so the band can learn your calm level.";
+}
+function timeChart(canvas, datasets, scales) {  // a line chart over time, in the page's colours
+  const grid = { color: css("--line") }, ticks = { color: css("--muted"), font: { family: "Figtree" } };
+  // ticks show seconds while the axis spans under 15 minutes, so a short recording's labels don't repeat
+  const clock = function (v) {
+    return new Date(v).toLocaleTimeString([], this.max - this.min < 15 * 60e3
+      ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
+  };
+  const sc = { x: { type: "linear", grid, ticks: { ...ticks, maxTicksLimit: 6, callback: clock } } };
+  for (const [k, v] of Object.entries(scales)) sc[k] = { grid: v.position === "right" ? { drawOnChartArea: false } : grid, ticks, ...v,
+    title: v.title ? { display: true, text: v.title, color: css("--muted") } : undefined };
+  return new Chart(canvas, { type: "line", data: { datasets }, options: { animation: false, maintainAspectRatio: false, parsing: true,
+    plugins: { legend: { labels: { color: css("--text"), font: { family: "Figtree" } } },
+      tooltip: { callbacks: { title: items => new Date(items[0].parsed.x).toLocaleTimeString() } } }, scales: sc } });
+}
+function thin(points, max = 1500) {  // at most `max` points, averaging neighbours, so hours of 4 Hz GSR stay quick
+  if (points.length <= max) return points;
+  const k = Math.ceil(points.length / max), out = [];
+  for (let i = 0; i < points.length; i += k) {
+    const b = points.slice(i, i + k);
+    out.push({ x: b.reduce((s, p) => s + p.x, 0) / b.length, y: b.reduce((s, p) => s + p.y, 0) / b.length });
+  }
+  return out;
+}
+function renderBandSensorCard(bs) {
+  const has = bs && bs.updated != null;
+  $("bandSensorCard").hidden = !has;
+  if (!has) return;
+  $("bandSensorSource").textContent = bs.current ? "Live from your band" : `Last reading at ${new Date(bs.updated * 1000).toLocaleTimeString()}`;
+  $("bandSensorTiles2").innerHTML = bandSensorTiles(bs);
+  const pts = bs.series;
+  const datasets = [
+    { label: "Skin conductance (µS)", data: pts.map(p => ({ x: p.t * 1000, y: p.gsr })), yAxisID: "y",
+      borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .3, pointRadius: 0 },
+    { label: "Stress model output", data: pts.filter(p => p.stress != null).map(p => ({ x: p.t * 1000, y: p.stress })), yAxisID: "y1",
+      borderColor: css("--warn"), backgroundColor: css("--warn"), borderDash: [5, 4], tension: .3, pointRadius: 0 },
+  ];
+  if (!bandSensorChart) bandSensorChart = timeChart($("bandSensorChart"), datasets, { y: { title: "µS" }, y1: { position: "right", min: 0, max: 1 } });
+  else { bandSensorChart.data.datasets = datasets; bandSensorChart.update(); }
+}
+
+const LABEL_NAMES = { day: "Daytime", sleep: "Sleep", test: "Test" };
 async function loadBandSessions() {
   const list = await (await fetch("/api/band/sessions")).json();
   const when = t => new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  const names = { day: "Daytime", sleep: "Sleep", test: "Test" };
-  $("bandSessions").innerHTML = list.length ? list.slice(0, 6).map(x => `<li><span>${when(x.started_at)} · ${names[x.label] || x.label}${x.stopped_at ? "" : " · recording"}</span>
+  $("bandSessions").innerHTML = list.length ? list.slice(0, 6).map(x => `<li class="open" data-id="${x.id}" tabindex="0" role="button"><span>${when(x.started_at)} · ${LABEL_NAMES[x.label] || x.label}${x.stopped_at ? "" : " · recording"}</span>
     <span>${Math.round(x.duration_s / 60)} min · ${x.scratch_count} scratch${x.scratch_count === 1 ? "" : "es"}</span></li>`).join("")
     : '<li class="muted">No recordings yet.</li>';
+  $("bandSessions").querySelectorAll("li.open").forEach(li => {
+    li.onclick = () => openSession(+li.dataset.id);
+    li.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSession(+li.dataset.id); } };
+  });
 }
+
+// one recording: movement and scratching, skin conductance and temperature, moisture; CSV download
+let svCharts = [], svData = null;
+function closeSession() { svCharts.forEach(c => c.destroy()); svCharts = []; svData = null; $("sessionView").hidden = true; }
+async function openSession(id) {
+  const s = await (await fetch(`/api/band/sessions/${id}`)).json();
+  if (s.detail) return;
+  closeSession(); svData = s;
+  $("svTitle").textContent = `${LABEL_NAMES[s.label] || s.label} recording`;
+  $("svSummary").textContent = `${new Date(s.started_at * 1000).toLocaleString()} · ${Math.round(s.duration_s / 60)} min · ` +
+    `${s.scratch_count} scratch episode${s.scratch_count === 1 ? "" : "s"}${s.stopped_at ? "" : " · still recording"}`;
+  const body = $("svBody"); body.innerHTML = "";
+  const section = title => {
+    const h = document.createElement("h3"); h.textContent = title; h.style.cssText = "font-size:17px;margin:18px 0 6px;color:var(--berry)";
+    const wrap = document.createElement("div"); wrap.style.cssText = "position:relative;height:200px";
+    const c = document.createElement("canvas"); wrap.appendChild(c); body.append(h, wrap);
+    return c;
+  };
+  const xy = (rows, f) => rows.map(r => ({ x: r.ts * 1000, y: f(r) }));
+  if (s.motion_summary.length || s.scratch_events.length) svCharts.push(timeChart(section("Movement and scratch episodes"), [
+    { label: "Movement (g)", data: thin(xy(s.motion_summary, r => r.activity)), yAxisID: "y", borderColor: css("--neutral"),
+      backgroundColor: css("--neutral"), tension: .2, pointRadius: 0 },
+    { type: "scatter", label: "Scratch episode", data: s.scratch_events.map(e => ({ x: e.ts * 1000, y: e.intensity })), yAxisID: "y",
+      pointStyle: "triangle", pointRadius: 7, backgroundColor: css("--bad"), borderColor: css("--bad") },
+  ], { y: { min: 0, title: "g" } }));
+  if (s.gsr.length || s.skin_temp.length) svCharts.push(timeChart(section("Skin conductance and temperature"), [
+    { label: "Skin conductance (µS)", data: thin(xy(s.gsr, r => r.microsiemens)), yAxisID: "y", borderColor: css("--accent"),
+      backgroundColor: css("--accent"), tension: .2, pointRadius: 0 },
+    { label: "Skin temperature (°C)", data: thin(xy(s.skin_temp, r => r.c)), yAxisID: "y1", borderColor: css("--warn"),
+      backgroundColor: css("--warn"), borderDash: [5, 4], tension: .2, pointRadius: 0 },
+  ], { y: { title: "µS" }, y1: { position: "right", title: "°C" } }));
+  const moist = s.moisture.filter(m => m.reference > 0);
+  if (moist.length) svCharts.push(timeChart(section("Hydration deficit: eczema patch vs healthy skin"), [
+    { label: "Deficit (%)", data: thin(xy(moist, m => (1 - m.patch / m.reference) * 100)), yAxisID: "y", borderColor: css("--ok"),
+      backgroundColor: css("--ok"), tension: .2, pointRadius: 0 },
+  ], { y: { title: "%" } }));
+  if (!svCharts.length) body.innerHTML = '<div class="empty">No readings in this recording yet.</div>';
+  $("svCsv").disabled = !svCharts.length;
+  $("sessionView").hidden = false; $("svClose").focus();
+}
+$("svClose").onclick = closeSession;
+$("sessionView").onclick = e => { if (e.target === $("sessionView")) closeSession(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sessionView").hidden) closeSession(); });
+$("svCsv").onclick = () => {
+  const s = svData;
+  if (!s) return;
+  const cols = ["activity_g", "scratch_energy", "duration_s", "intensity", "microsiemens", "skin_temp_c", "moisture_patch", "moisture_reference"];
+  const rows = [], add = (ts, kind, v) => rows.push([ts, kind, ...cols.map(c => v[c] ?? "")]);
+  s.motion_summary.forEach(x => add(x.ts, "motion", { activity_g: x.activity, scratch_energy: x.scratch_energy }));
+  s.scratch_events.forEach(x => add(x.ts, "scratch", { duration_s: x.duration_s, intensity: x.intensity }));
+  s.gsr.forEach(x => add(x.ts, "gsr", { microsiemens: x.microsiemens }));
+  s.skin_temp.forEach(x => add(x.ts, "skin_temp", { skin_temp_c: x.c }));
+  s.moisture.forEach(x => add(x.ts, "moisture", { moisture_patch: x.patch, moisture_reference: x.reference }));
+  rows.sort((a, b) => a[0] - b[0]);
+  const csv = [["time", "unix_s", "kind", ...cols].join(",")]
+    .concat(rows.map(([ts, ...rest]) => [new Date(ts * 1000).toISOString(), ts.toFixed(3), ...rest].join(","))).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `dermedge-recording-${s.id}-${new Date(s.started_at * 1000).toISOString().slice(0, 10)}.csv`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
 $("bandConnect").onclick = () => DermBand.connect();
 $("bandDisconnect").onclick = () => DermBand.disconnect();
 $("bandStart").onclick = () => DermBand.start($("bandLabel").value).catch(e => alert(e.message));
@@ -971,6 +1144,19 @@ $("obNext").onclick = async () => {
 function applyPreferredSite() {
   if (prefs.sites && prefs.sites.length && !$("site").value) $("site").value = prefs.sites[0];
 }
+
+// installable app: Chrome and Edge offer an install prompt; sw.js caches the app for offline use
+let installEvt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("installRow").hidden = false; });
+addEventListener("appinstalled", () => { installEvt = null; $("installRow").hidden = true; });
+$("installBtn").onclick = async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  await installEvt.userChoice;
+  installEvt = null; $("installRow").hidden = true;
+};
+if ("serviceWorker" in navigator) addEventListener("load", () =>
+  navigator.serviceWorker.register("/sw.js").catch(e => console.warn("offline support unavailable:", e)));
 
 (async () => {
   prefs = await (await fetch("/api/settings")).json();

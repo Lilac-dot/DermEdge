@@ -63,6 +63,10 @@ At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick Iâ€
 
 Checked against the Python models: the browser CLIP gives the same stage-1 decision on 98.5% of 200 held-out phone photos, and the ONNX ResNet18 and JavaScript stress model match their Python versions exactly. `scripts/export_web_models.py` rebuilds `web/models/`.
 
+**Install it as an app (PWA):** in Chrome or Edge, use *Install DermEdge* on the Home tab (or the browser's install icon); on Android it goes on the home screen. `web/sw.js` caches the app and ONNX Runtime, and `engine.mjs` already caches the models, so after the first visit it opens and checks skin with no connection. Bluetooth to the band works in the installed app on Android and desktop Chrome/Edge, not on iPhone.
+
+**Band sensor readings:** when the band sends skin conductance, skin temperature or moisture (formats in `docs/DERMEDGE_APP_GUIDE.md`), the site stores them with the recording, scores stress live from skin conductance (`web/models/stress_gsr.json`, from `scripts/train_gsr_stress.py`), feeds stress and dry skin into the flare triggers, and shows each recording's charts with a CSV download for the pilot.
+
 ## Run the hub
 
 ```bash

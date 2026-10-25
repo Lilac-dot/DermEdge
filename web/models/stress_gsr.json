@@ -1,0 +1,55 @@
+{
+  "features": [
+    "EDA_mean_rel",
+    "EDA_std_rel",
+    "EDA_min_rel",
+    "EDA_max_rel",
+    "EDA_range_rel",
+    "EDA_slope_rel"
+  ],
+  "mean": [
+    -0.49472986,
+    -0.03380526,
+    -0.4060275,
+    -0.57349036,
+    -0.16746285,
+    0.00092243
+  ],
+  "scale": [
+    2.01684121,
+    0.07701629,
+    1.90315713,
+    2.12659761,
+    0.33819786,
+    0.00181283
+  ],
+  "coef": [
+    0.54675466,
+    0.20778578,
+    0.47385502,
+    0.52707016,
+    0.64768471,
+    1.42943293
+  ],
+  "intercept": -0.31269044,
+  "threshold": 0.5,
+  "window_s": 30,
+  "calibration_windows": 3,
+  "slope_units": "microsiemens per sample at 4 Hz",
+  "validation": {
+    "test": "leave-one-person-out, 15 WESAD participants, 30 s windows, calibrated on each person's first 90 s",
+    "n_windows": {
+      "stress": 337,
+      "calm_before": 548,
+      "calm_after": 583
+    },
+    "accuracy": 0.896,
+    "majority_class_accuracy": 0.77,
+    "balanced_accuracy": 0.837,
+    "auc_pooled": 0.851,
+    "stress_caught": 0.727,
+    "calm_before_cleared": 0.971,
+    "calm_after_cleared": 0.925,
+    "people_below_0_7_balanced_accuracy": 4
+  }
+}

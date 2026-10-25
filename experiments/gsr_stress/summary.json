@@ -1,0 +1,16 @@
+{
+  "test": "leave-one-person-out, 15 WESAD participants, 30 s windows, calibrated on each person's first 90 s",
+  "n_windows": {
+    "stress": 337,
+    "calm_before": 548,
+    "calm_after": 583
+  },
+  "accuracy": 0.896,
+  "majority_class_accuracy": 0.77,
+  "balanced_accuracy": 0.837,
+  "auc_pooled": 0.851,
+  "stress_caught": 0.727,
+  "calm_before_cleared": 0.971,
+  "calm_after_cleared": 0.925,
+  "people_below_0_7_balanced_accuracy": 4
+}

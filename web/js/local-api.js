@@ -8,13 +8,18 @@
   const loadEngine = () => (engine = engine || import('/js/engine.mjs'));
 
   // ---------- storage ----------
-  // v2 adds the DermEdge band's paired devices, recording sessions, readings and alerts
+  // v2 adds the DermEdge band's paired devices, recording sessions, readings and alerts; v3 indexes
+  // readings by (session, kind), since 4 Hz skin conductance adds ~14,000 readings an hour
   const DB_NAME = 'dermedge', STORES = ['analyses', 'treatments', 'band_devices', 'band_sessions', 'band_readings', 'band_alerts'];
   let dbp;
   function db() {
     return dbp = dbp || new Promise((res, rej) => {
-      const r = indexedDB.open(DB_NAME, 2);
-      r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id', autoIncrement: true }); });
+      const r = indexedDB.open(DB_NAME, 3);
+      r.onupgradeneeded = () => {
+        STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id', autoIncrement: true }); });
+        const readings = r.transaction.objectStore('band_readings');
+        if (!readings.indexNames.contains('session_kind')) readings.createIndex('session_kind', ['session_id', 'kind']);
+      };
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
   }
@@ -52,6 +57,8 @@
     'dry skin (moisture patch)': 'Your eczema patch is drier than healthy skin. Apply moisturiser now and after bathing.',
     'night scratching (IMU, simulated)': 'Scratching was detected overnight. Keep nails short and consider cotton gloves at night.',
     'scratching (DermEdge band)': 'Your band picked up scratching. Keep nails short, and try a cool compress or moisturiser on the itchy spot instead.',
+    'stress (band GSR)': STRESS_TIP,
+    'dry skin (band moisture patch)': 'Your band reads the eczema patch drier than healthy skin. Apply moisturiser now and after bathing.',
     'poor sleep': 'Short sleep. Aim for a cool bedroom and a regular bedtime tonight.',
     'new soap / product': 'You used a new product. If the skin reacts, stop using it and note it for your doctor.',
   };
@@ -176,7 +183,81 @@
     if (m.hydration_deficit != null) t['dry skin (moisture patch)'] = clip(m.hydration_deficit / 8, 0, 1);
     if (m.night_scratches) t['night scratching (IMU, simulated)'] = clip(m.night_scratches / 30, 0, 1);
     if (m.band_scratches) t['scratching (DermEdge band)'] = clip(m.band_scratches / 30, 0, 1);  // same scale as the hub
+    // the band's own sensors count while they're current. Stress starts at the model's threshold
+    // (0.5): a calm wearer scores ~0.45 right after calibration and shouldn't count as a trigger
+    const lm = live.markers;
+    if (liveCurrent() && lm.stress_p != null) t['stress (band GSR)'] = clip((lm.stress_p - 0.5) / 0.3, 0, 1);
+    if (liveCurrent() && lm.hydration_deficit != null) t['dry skin (band moisture patch)'] = clip(lm.hydration_deficit / 8, 0, 1);
     return t;
+  }
+
+  // ---------- the band's own sensors: skin conductance -> stress, skin temperature, moisture ----------
+  // Skin conductance is scored with web/models/stress_gsr.json (scripts/train_gsr_stress.py):
+  // logistic regression on six statistics of each 30 s window, relative to the wearer's first 3
+  // windows (90 s sitting calm) of the recording. Tested on WESAD one held-out person at a time:
+  // 89.6% accuracy (77% by always saying calm), 73% of stress windows caught, poor for 4 of 15
+  // people. Skin temperature is shown but not scored: in that test it drifted with time on the
+  // wrist and made stress detection worse.
+  const GSR_WIN = 30, GSR_MIN_READINGS = 20, LIVE_STALE_S = 600;
+  let gsrModel = null, live = freshLive(null);
+  function freshLive(sessionId) { return { sessionId, buf: [], winStart: null, calib: [], profile: null, stress: [], markers: {}, series: [], updated: null }; }
+  const liveFor = sessionId => (live.sessionId === sessionId ? live : (live = freshLive(sessionId)));
+  const liveCurrent = () => live.updated != null && Date.now() / 1000 - live.updated < LIVE_STALE_S;
+  const avg = a => a.reduce((s, x) => s + x, 0) / a.length;
+
+  function gsrFeatures(pts) {  // pts: [{ts, v}], the readings of one window (scripts/wesad_features.py, EDA)
+    const v = pts.map(p => p.v), m = avg(v), mn = Math.min(...v), mx = Math.max(...v), tm = avg(pts.map(p => p.ts));
+    let num = 0, den = 0;
+    for (const p of pts) { num += (p.ts - tm) * (p.v - m); den += (p.ts - tm) ** 2; }
+    return { EDA_mean: m, EDA_std: Math.sqrt(avg(v.map(x => (x - m) ** 2))), EDA_min: mn, EDA_max: mx, EDA_range: mx - mn,
+             EDA_slope: (den ? num / den : 0) / 4 };  // per second -> per sample at the E4's 4 Hz, as trained
+  }
+  function gsrStress(f, profile) {
+    const g = gsrModel;
+    const z = g.features.reduce((s, name, i) => {
+      const k = name.replace(/_rel$/, '');
+      return s + g.coef[i] * ((f[k] - profile[k]) - g.mean[i]) / g.scale[i];
+    }, g.intercept);
+    return 1 / (1 + Math.exp(-z));
+  }
+  function closeGsrWindow(L) {
+    const end = L.winStart + GSR_WIN, pts = L.buf.filter(p => p.ts < end), m = L.markers;
+    L.buf = L.buf.filter(p => p.ts >= end);
+    L.winStart = end;
+    if (pts.length < GSR_MIN_READINGS) return;  // a gap (out of range, electrodes off): not scored
+    const f = gsrFeatures(pts);
+    if (!L.profile) {
+      L.calib.push(f);
+      m.calibration = `${L.calib.length}/3 calm windows`;
+      if (L.calib.length >= 3) {
+        L.profile = Object.fromEntries(Object.keys(f).map(k => [k, avg(L.calib.map(c => c[k]))]));
+        m.calibration = 'done';
+      }
+    } else {
+      L.stress = L.stress.concat(gsrStress(f, L.profile)).slice(-3);  // smoothed over ~90 s, as the hub does
+      m.stress_p = +avg(L.stress).toFixed(3);
+    }
+    L.series = L.series.concat({ t: end, gsr: +f.EDA_mean.toFixed(3), stress: m.stress_p ?? null, temp: m.skin_temp ?? null }).slice(-240);
+  }
+  async function liveSensors(sessionId, gsr, temps, moist) {  // each sorted by ts
+    const L = liveFor(sessionId), m = L.markers;
+    if (gsr.length) {
+      gsrModel = gsrModel || await realFetch('/models/stress_gsr.json?v=3').then(r => r.json());
+      for (const r of gsr) {
+        if (L.winStart == null) L.winStart = r.ts;
+        while (r.ts >= L.winStart + GSR_WIN) {
+          closeGsrWindow(L);
+          if (!L.buf.length && r.ts >= L.winStart + GSR_WIN) L.winStart = r.ts;  // after a long gap, restart here
+        }
+        L.buf.push({ ts: r.ts, v: r.microsiemens });
+      }
+      m.skin_conductance = +avg(gsr.map(r => r.microsiemens)).toFixed(2);
+      if (!m.calibration) m.calibration = '0/3 calm windows';
+    }
+    if (temps.length) m.skin_temp = +avg(temps.map(x => x.c)).toFixed(2);
+    const ref = moist.filter(x => x.reference > 0);
+    if (ref.length) m.hydration_deficit = +((1 - avg(ref.map(x => x.patch)) / avg(ref.map(x => x.reference))) * 100).toFixed(1);
+    L.updated = Date.now() / 1000;
   }
   async function startSim(name) {
     clearInterval(sim.timer); sim = { scenario: null, timer: null, k: 0 };
@@ -197,6 +278,8 @@
     return { wearable: { markers: { ...wear.markers }, updated: wear.updated, series: wear.series }, journal, journal_at: journalAt,
              sim: { scenario: sim.scenario, available: true, missing: null, label: sim.scenario ? SCEN[sim.scenario].label : null,
                     source: sim.scenario ? 'Simulated wristband and moisture patch, scored by the WESAD stress model' : null },
+             band_sensors: { markers: { ...live.markers }, updated: live.updated, current: liveCurrent(), session_id: live.sessionId,
+                             series: live.series },
              triggers: trig, trigger_index: index, alerts: alerts(trig, index) };
   }
 
@@ -209,13 +292,17 @@
     wear.markers.band_scratches = wear.scratches.length;
     wear.updated = Date.now() / 1000;
   }
+  const ofKind = (id, kind) => IDBKeyRange.only([id, kind]);
   async function bandSession(s, withReadings) {
-    const readings = (await all('band_readings')).filter(r => r.session_id === s.id).sort((a, b) => a.ts - b.ts);
-    const out = { ...s, scratch_count: readings.filter(r => r.kind === 'scratch').length,
+    const out = { ...s, scratch_count: await tx('band_readings', 'readonly', st => st.index('session_kind').count(ofKind(s.id, 'scratch'))),
                   duration_s: +(((s.stopped_at || Date.now() / 1000) - s.started_at)).toFixed(1) };
     if (withReadings) {
-      out.scratch_events = readings.filter(r => r.kind === 'scratch').map(r => ({ ts: r.ts, duration_s: r.duration_s, intensity: r.intensity }));
-      out.motion_summary = readings.filter(r => r.kind === 'motion').map(r => ({ ts: r.ts, activity: r.activity, scratch_energy: r.scratch_energy }));
+      const kind = async k => (await tx('band_readings', 'readonly', st => st.index('session_kind').getAll(ofKind(s.id, k)))).sort((a, b) => a.ts - b.ts);
+      out.scratch_events = (await kind('scratch')).map(r => ({ ts: r.ts, duration_s: r.duration_s, intensity: r.intensity }));
+      out.motion_summary = (await kind('motion')).map(r => ({ ts: r.ts, activity: r.activity, scratch_energy: r.scratch_energy }));
+      out.gsr = (await kind('gsr')).map(r => ({ ts: r.ts, microsiemens: r.microsiemens }));
+      out.skin_temp = (await kind('skin_temp')).map(r => ({ ts: r.ts, c: r.c }));
+      out.moisture = (await kind('moisture')).map(r => ({ ts: r.ts, patch: r.patch, reference: r.reference }));
     }
     return out;
   }
@@ -263,12 +350,23 @@
       const when = x => Math.min(Math.max(x.ts != null ? x.ts : x.t != null ? s.started_at + x.t : now, s.started_at), now);
       const scratches = (body.scratch_events || []).filter(e => e.duration_s >= 0 && e.intensity >= 0);
       const motion = (body.motion || []).filter(x => x.activity >= 0 && x.scratch_energy >= 0);
+      // the hub's limits (app/band.py): conductance 0-100 uS, skin temperature 10-50 C
+      const byTs = (a, b) => a.ts - b.ts;
+      const gsr = (body.gsr || []).filter(x => x.microsiemens >= 0 && x.microsiemens <= 100).map(x => ({ ts: when(x), microsiemens: +x.microsiemens })).sort(byTs);
+      const temps = (body.skin_temp || []).filter(x => x.c >= 10 && x.c <= 50).map(x => ({ ts: when(x), c: +x.c })).sort(byTs);
+      const moist = (body.moisture || []).filter(x => Number.isFinite(x.patch)).map(x => ({ ts: when(x), patch: +x.patch,
+        reference: Number.isFinite(x.reference) ? +x.reference : null })).sort(byTs);
       await tx('band_readings', 'readwrite', st => {
         scratches.forEach(e => st.add({ session_id: s.id, kind: 'scratch', ts: when(e), duration_s: +e.duration_s, intensity: +e.intensity }));
         motion.forEach(x => st.add({ session_id: s.id, kind: 'motion', ts: when(x), activity: +x.activity, scratch_energy: +x.scratch_energy }));
+        gsr.forEach(x => st.add({ session_id: s.id, kind: 'gsr', ...x }));
+        temps.forEach(x => st.add({ session_id: s.id, kind: 'skin_temp', ...x }));
+        moist.forEach(x => st.add({ session_id: s.id, kind: 'moisture', ...x }));
       });
       scratches.forEach(e => bandScratch(when(e)));
-      return json({ stored: { scratch_events: scratches.length, motion: motion.length }, alert: await bandAlertCheck(s.id) });
+      if (gsr.length || temps.length || moist.length) await liveSensors(s.id, gsr, temps, moist);
+      return json({ stored: { scratch_events: scratches.length, motion: motion.length, gsr: gsr.length, skin_temp: temps.length, moisture: moist.length },
+                    alert: await bandAlertCheck(s.id) });
     }
     if ((m = p.match(/^\/api\/band\/sessions\/(\d+)$/))) {
       const s = await getOne('band_sessions', +m[1]);
@@ -332,7 +430,7 @@
     await Promise.all(STORES.map(st => tx(st, 'readwrite', s => s.clear())));
     ['settings', 'journal', 'journal_at'].forEach(k => { try { localStorage.removeItem('dermedge.' + k); } catch (e) { /* nothing stored */ } });
     settings = { ...DEFAULT_SETTINGS }; journal = {}; journalAt = null;
-    await startSim(null); wear = fresh();
+    await startSim(null); wear = fresh(); live = freshLive(null);
     return { removed };
   }
 

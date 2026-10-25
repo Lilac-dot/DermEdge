@@ -66,10 +66,22 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
   than the band (offline recording), send `ts = now - (status.el - t)` instead of `t`.
 - The band buffers about **an hour** of readings while disconnected and sends them when the link
   comes back (status `"s":"syncing"`, `q` counting down).
-- Future fields the hub already accepts: `gsr` (`microsiemens`) and `moisture` (`patch`,
-  `reference`), as the sensors are added. `temperatures` (`lesion_c`, `reference_c`) is still
-  accepted but was built for the lesion-vs-healthy pair, now future scope; it changes to one skin
-  temperature alongside GSR (see below).
+- **Sensor readings** (GSR, skin temperature, moisture). The website already relays, stores and
+  charts these; the band sends them once the sensors are wired. Same `r` and `t` as above, and a
+  message may carry several items:
+  ```
+  {"r":3,"gsr":[{"t":12.25,"microsiemens":1.84}]}            4 Hz, 0-100 uS
+  {"r":3,"skin_temp":[{"t":12.0,"c":32.4}]}                   1 Hz is plenty, 10-50 C
+  {"r":3,"moisture":[{"t":12.0,"patch":47.1,"reference":50.2}]}  eczema patch, healthy skin
+  ```
+  GSR should be sampled at **4 Hz** (the E4's rate the stress model was trained at), in
+  microsiemens. The website scores stress from it with `web/models/stress_gsr.json`
+  (`scripts/train_gsr_stress.py`): each 30 s window against the wearer's first 90 s of the
+  recording, so the wearer sits still for that part. Skin temperature is shown and stored but
+  not used for stress: in the WESAD test it drifted with time on the wrist and made stress
+  detection worse. `temperatures` (`lesion_c`) is also accepted and treated as skin temperature.
+- The hub (`app/band.py`) accepts `gsr` and `moisture` already; it has no `skin_temp` field yet
+  (its `temperatures` table was built for the lesion-vs-healthy pair, now future scope).
 
 ### 5. Flare alerts
 - A readings upload can return `"alert": {id, level, risk, reasons, tips}`; the hub raises at most

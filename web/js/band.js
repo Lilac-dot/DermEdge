@@ -18,6 +18,7 @@
     name: null, id: null, status: null, error: null,
     alert: null,         // the newest undismissed alert, as sent to the band
     sessionsChanged: 0,  // bumps when a recording starts or stops, for the page to reload its list
+    sensorsAt: 0,        // when GSR, skin temperature or moisture readings last arrived (ms)
   };
   const listeners = new Set();
   const emit = () => listeners.forEach(f => { try { f(st); } catch (e) { console.error(e); } });
@@ -28,6 +29,10 @@
   const op = f => (gatt = gatt.then(f, f));
   const api = (url, body) => fetch(url, body === undefined ? undefined : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+
+  // reading types the band can send, each a list of {t, ...}; gsr, skin_temp and moisture arrive
+  // as those sensors are wired (docs/DERMEDGE_APP_GUIDE.md, "Relay readings")
+  const SENSOR_KEYS = ['motion', 'scratch_events', 'gsr', 'skin_temp', 'temperatures', 'moisture'];
 
   // ---------- recordings: band r -> session id ----------
   // A band reboot restarts r at 1, so the map belongs to one connection's run of status messages.
@@ -79,18 +84,25 @@
     for (const [r, items] of byRec) {
       try {
         const live = lastStatus && lastStatus.r === r && lastStatus.s === 'recording' ? lastStatus : null;
-        const maxT = Math.max(0, ...items.flatMap(m => [...(m.motion || []), ...(m.scratch_events || [])].map(x => x.t)));
+        const maxT = Math.max(0, ...items.flatMap(m => SENSOR_KEYS.flatMap(k => m[k] || []).map(x => x.t)));
         const rec = await session(r, live ? live.el : maxT + 1, live ? live.src : 'touch', live ? live.label : 'day');
-        const body = { scratch_events: [], motion: [] };
+        const body = { scratch_events: [], motion: [], gsr: [], skin_temp: [], moisture: [] };
         for (const m of items) {
           // absolute times: the band only knows seconds since its recording started
-          for (const e of m.scratch_events || []) body.scratch_events.push({ ts: rec.startedAt + e.t, duration_s: e.duration_s, intensity: e.intensity });
-          for (const x of m.motion || []) body.motion.push({ ts: rec.startedAt + x.t, activity: x.activity, scratch_energy: x.scratch_energy });
+          const ts = x => rec.startedAt + x.t;
+          for (const e of m.scratch_events || []) body.scratch_events.push({ ts: ts(e), duration_s: e.duration_s, intensity: e.intensity });
+          for (const x of m.motion || []) body.motion.push({ ts: ts(x), activity: x.activity, scratch_energy: x.scratch_energy });
+          for (const x of m.gsr || []) body.gsr.push({ ts: ts(x), microsiemens: x.microsiemens });
+          // one skin temperature for the stress model; `temperatures` is the hub's older pair shape
+          for (const x of m.skin_temp || []) body.skin_temp.push({ ts: ts(x), c: x.c });
+          for (const x of m.temperatures || []) body.skin_temp.push({ ts: ts(x), c: x.lesion_c });
+          for (const x of m.moisture || []) body.moisture.push({ ts: ts(x), patch: x.patch, reference: x.reference });
         }
         const res = await api(`/api/band/sessions/${rec.sessionId}/readings`, body);
         if (res.detail) { console.warn('band: readings refused:', res.detail); continue; }  // e.g. the session was stopped elsewhere
         if (res.alert) await showAlert(res.alert);
         if (body.scratch_events.length) set({ sessionsChanged: st.sessionsChanged + 1 });
+        if (body.gsr.length || body.skin_temp.length || body.moisture.length) set({ sensorsAt: Date.now() });
       } catch (e) {
         console.warn('band: relaying readings failed, retrying', e);
         queue.unshift(...items);  // keep them for the next flush
@@ -212,5 +224,7 @@
     start: label => command(label ? `start:${label}` : 'start'),
     stop: () => command('stop'),
     dismissAlert: () => dismissAlert(false),
+    // for development: feed status and data messages as if a band sent them (no Bluetooth)
+    _replay: { status: s => onStatus(s), data: m => { if (m && m.r) queue.push(m); }, flush },
   };
 })();

@@ -13,6 +13,10 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
  TFT status + alerts                                 shows history + alerts             sessions, readings, alerts
 ```
 
+- **A working reference:** the website already does all of this in `web/js/band.js` (Web
+  Bluetooth, pairing, relaying, alerts both ways) on its Home tab. In the browser version,
+  `web/js/local-api.js` answers the same `/api/band/*` calls and keeps everything in the
+  browser's IndexedDB; on the hub, `app/band.py` answers them behind a login.
 - **The band never talks to the hub directly** (for now). The app relays: it reads the band over
   Bluetooth and posts to the hub as the logged-in user.
 - **Data stays local.** The hub runs on the user's laptop; there is no cloud. Every band endpoint

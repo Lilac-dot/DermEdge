@@ -41,13 +41,13 @@ Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis
 At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI, even though it ranked them almost as well (AUC 0.91 vs 0.93). Choosing your skin type applies a calibrated threshold, which brings V–VI to **83%**. Details: `experiments/clip_rash_head/summary.json`.
 
 ## Features
-- Live camera with a rash / no-rash badge; auto-analyses when a rash is held in view
+- Live camera with a rash / no-rash badge, on only when you turn it on; auto-analyses when a rash is held in view
 - Photo quality check: asks for a retake when the photo is blurry, too dark or washed out
 - Grad-CAM heatmap of where the eczema model looked
 - "Not sure, see a dermatologist" when the models disagree or are uncertain
 - Body-site tracking with before/after comparison ("inner elbow 6.1 → 4.3, better")
 - Wearable markers: stress, heart rate, skin conductance, skin temperature, hydration deficit, night scratching
-- **DermEdge band**: an ESP32 wristband that detects scratching from its accelerometer, starts and stops recordings from a touch pad or the app, buffers an hour offline, and shows flare alerts on its own screen
+- **DermEdge band**: connect it from the Home tab (Chrome or Edge, Web Bluetooth, a 6-digit pairing code); an ESP32 wristband that detects scratching from its accelerometer, starts and stops recordings from a touch pad or the app, buffers an hour offline, and shows flare alerts on its own screen
 - Accounts and paired bands: recordings, scratch events and alerts stored on the hub behind a login, with encrypted, passkey-paired Bluetooth to the band
 - Daily flare risk with alerts and one tip per active trigger
 - Skin-type calibration (Fitzpatrick I–VI)

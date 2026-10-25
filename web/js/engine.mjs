@@ -1,55 +1,99 @@
 // DermEdge's image models, running in the visitor's browser. Nothing is uploaded: the model
 // files are downloaded once (and cached by the browser), and every photo stays on the device.
 //
-//   Stage 1  CLIP ViT-B/16 image encoder (transformers.js, Xenova/clip-vit-base-patch16) +
-//            the fine-tuned rash head and per-skin-type offsets (models/heads.json)
-//   Stage 2  ResNet18 eczema vs 7 look-alikes (models/stage2.onnx, ONNX Runtime Web) with a
-//            class activation map from its layer4 features
+//   Stage 1  CLIP ViT-B/16 image encoder (models/clip_vision_w8.*.onnx, 8-bit weights, from
+//            scripts/export_web_clip.py) + the fine-tuned rash head and per-skin-type offsets
+//            (models/heads.json)
+//   Stage 2  ResNet18 eczema vs 7 look-alikes (models/stage2.onnx) with a class activation map
+//            from its layer4 features
 //   Stage 3  severity head on the same CLIP embedding
-// Checked against the Python models: CLIP fp16/fp32 gives the same stage-1 decision on 98.5-99%
-// of 200 held-out phone photos (AUC 0.931 vs 0.936); the ONNX ResNet18 matches PyTorch exactly.
-import { AutoProcessor, CLIPVisionModelWithProjection, RawImage, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+// All three run on ONNX Runtime Web: WebGPU where the browser has it, else multithreaded
+// WebAssembly (vercel.json sets the cross-origin isolation headers threads need).
+// Checked against the Python models: the 8-bit CLIP keeps the embedding within cosine 0.999 of
+// fp32 and the same stage-1 decision on 98.7% of 300 SCIN phone photos (scripts/
+// check_web_clip_quantized.py); the ONNX ResNet18 matches PyTorch exactly.
 
-env.allowLocalModels = false;
-const CLIP_ID = 'Xenova/clip-vit-base-patch16';
 // Bump when a file in web/models changes, so browsers that cached the old copy fetch the new one
 // (also bump the two ?v= in local-api.js).
-export const MODELS_V = 2;
+export const MODELS_V = 3;
 const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
-let processor, vision, stage2, text, heads, fc, ready, backend = '';
+const CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073], CLIP_STD = [0.26862954, 0.26130258, 0.27577711];
+const CLIP_PARTS = 2, CACHE = 'dermedge-models';
+let clip, stage2, stage2Ready, text, heads, fc, ready, backend = '';
 
 function report(onProgress, msg, frac) { if (onProgress) onProgress(msg, frac); }
 
+// Fetches a model file through the Cache API, so later visits read it from disk instead of the
+// network (the HTTP cache may evict files this large). onBytes(n) reports bytes as they arrive.
+async function fetchModel(url, onBytes) {
+  let cache = null;
+  try { cache = await caches.open(CACHE); } catch (e) { cache = null; }
+  const hit = cache && await cache.match(url);
+  if (hit) { const b = await hit.arrayBuffer(); onBytes(b.byteLength); return new Uint8Array(b); }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const reader = res.body.getReader(), chunks = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); n += value.length; onBytes(value.length);
+  }
+  const out = new Uint8Array(n);
+  let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
+  if (cache) cache.put(url, new Response(out)).catch(() => {});
+  return out;
+}
+
+async function dropOldModels() {  // cached files from earlier MODELS_V
+  try {
+    const cache = await caches.open(CACHE);
+    for (const req of await cache.keys()) if (!req.url.includes(`v=${MODELS_V}`)) cache.delete(req);
+  } catch (e) { /* no Cache API (private window): nothing to clean */ }
+}
+
 async function loadClip(onProgress) {
-  const files = {};
-  const progress_callback = p => {
-    if (p.status === 'progress' && p.total) {
-      files[p.file] = [p.loaded, p.total];
-      const [l, t] = Object.values(files).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
-      report(onProgress, `Downloading the skin model (first visit only): ${Math.round(l / 1e6)} of ${Math.round(t / 1e6)} MB`, l / t);
-    }
+  const TOTAL = 89.6e6;  // both parts, for the progress bar before their sizes are known
+  let got = 0;
+  const onBytes = n => {
+    got += n;
+    report(onProgress, `Loading the skin model: ${Math.round(got / 1e6)} of ${Math.round(TOTAL / 1e6)} MB`, Math.min(got / TOTAL, 0.99));
   };
-  processor = await AutoProcessor.from_pretrained(CLIP_ID);
-  // WebGPU + fp16 (173 MB) where the browser has it; otherwise WebAssembly + fp32 (345 MB).
+  const parts = await Promise.all([...Array(CLIP_PARTS).keys()].map(i => fetchModel(`/models/clip_vision_w8.${i}.onnx?v=${MODELS_V}`, onBytes)));
+  const bytes = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  let o = 0; for (const p of parts) { bytes.set(p, o); o += p.length; }
+  report(onProgress, 'Starting the skin model…', 0.99);
   let gpu = false;
   try { gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) { gpu = false; }
   if (gpu) {
-    try {
-      vision = await CLIPVisionModelWithProjection.from_pretrained(CLIP_ID, { device: 'webgpu', dtype: 'fp16', progress_callback });
-      backend = 'WebGPU'; return;
-    } catch (e) { console.warn('WebGPU CLIP failed, falling back to WebAssembly', e); }
+    try { clip = await window.ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; return; }
+    catch (e) { console.warn('WebGPU CLIP failed, falling back to WebAssembly', e); }
   }
-  vision = await CLIPVisionModelWithProjection.from_pretrained(CLIP_ID, { device: 'wasm', dtype: 'fp32', progress_callback });
-  backend = 'WebAssembly';
+  clip = await window.ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] });
+  backend = `WebAssembly, ${window.crossOriginIsolated ? window.ort.env.wasm.numThreads || 'multi' : 1} thread(s)`;
+}
+
+// Stage 2 is only needed once a photo screens positive, so it downloads in the background
+// while CLIP loads instead of in front of it. Its session is created only after CLIP's: two
+// sessions starting at once both try to initialise ONNX Runtime's WebAssembly ("multiple calls
+// to 'initWasm()'"), which knocks CLIP off WebGPU.
+let clipReady;
+function loadStage2() {
+  if (!stage2Ready) stage2Ready = Promise.all([fetchModel(`/models/stage2.onnx?v=${MODELS_V}`, () => {}), clipReady])
+    .then(([b]) => window.ort.InferenceSession.create(b, { executionProviders: ['wasm'] }))
+    .then(s => { stage2 = s; }, e => { stage2Ready = null; throw e; });
+  return stage2Ready;
 }
 
 export function init(onProgress) {
   if (!ready) ready = (async () => {
     report(onProgress, 'Loading DermEdge models…', 0);
-    [text, heads, fc] = await Promise.all(['clip_text', 'heads', 'stage2_fc'].map(n => fetch(`/models/${n}.json?v=${MODELS_V}`).then(r => r.json())));
     window.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-    stage2 = await window.ort.InferenceSession.create(`/models/stage2.onnx?v=${MODELS_V}`, { executionProviders: ['wasm'] });
-    await loadClip(onProgress);
+    dropOldModels();
+    clipReady = loadClip(onProgress);
+    loadStage2().catch(e => console.warn('stage 2 preload failed; retrying on first use', e));
+    [text, heads, fc] = await Promise.all(['clip_text', 'heads', 'stage2_fc'].map(n => fetch(`/models/${n}.json?v=${MODELS_V}`).then(r => r.json())));
+    await clipReady;
     report(onProgress, `Models ready (${backend})`, 1);
   })();
   return ready;
@@ -65,10 +109,21 @@ const sigmoid = z => 1 / (1 + Math.exp(-z));
 
 export async function bitmap(blob) { return createImageBitmap(blob, { imageOrientation: 'from-image' }); }
 
-async function clipEmbedding(blob) {
-  const inputs = await processor(await RawImage.fromBlob(blob));
-  const { image_embeds } = await serial(() => vision(inputs));
-  const e = Array.from(image_embeds.data), n = Math.hypot(...e);
+// CLIP preprocessing (openai/clip-vit-base-patch16): shortest side to 224, centre crop 224,
+// then normalise with CLIP's mean and std.
+function clipPixels(bmp) {
+  const s = 224 / Math.min(bmp.width, bmp.height), w = Math.round(bmp.width * s), h = Math.round(bmp.height * s);
+  const c = new OffscreenCanvas(224, 224), g = c.getContext('2d');
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(bmp, (224 - w) / 2, (224 - h) / 2, w, h);
+  const d = g.getImageData(0, 0, 224, 224).data, x = new Float32Array(3 * 224 * 224);
+  for (let i = 0; i < 224 * 224; i++) for (let ch = 0; ch < 3; ch++) x[ch * 50176 + i] = (d[4 * i + ch] / 255 - CLIP_MEAN[ch]) / CLIP_STD[ch];
+  return new window.ort.Tensor('float32', x, [1, 3, 224, 224]);
+}
+
+async function clipEmbedding(bmp) {
+  const out = await serial(() => clip.run({ pixel_values: clipPixels(bmp) }));
+  const e = Array.from(out.image_embeds.data), n = Math.hypot(...e);
   return e.map(x => x / n);
 }
 
@@ -85,7 +140,7 @@ function stage1(e, fitzpatrick) {
 
 export async function screen(blob, fitzpatrick) {
   await init();
-  const s = stage1(await clipEmbedding(blob), fitzpatrick);
+  const s = stage1(await clipEmbedding(await bitmap(blob)), fitzpatrick);
   return { p_rash: +s.p_rash.toFixed(3), skin: s.skin };
 }
 
@@ -141,10 +196,11 @@ export function toDataURL(bmp, size = 512, cam = null) {
 export async function analyze(blob, fitzpatrick) {
   await init();
   const bmp = await bitmap(blob);
-  const e = await clipEmbedding(blob), s = stage1(e, fitzpatrick);
+  const e = await clipEmbedding(bmp), s = stage1(e, fitzpatrick);
   const res = { p_rash: +s.p_rash.toFixed(3), skin: s.skin, calibrated_for: s.calibrated_for, p_eczema: null, severity: null };
   let cam = null;
   if (s.skin && s.p_rash >= 0.5) {
+    await loadStage2();
     const r = await stage2Run(bmp); res.p_eczema = +r.p.toFixed(3); cam = r.cam;
     if (r.p >= 0.5) {
       const score = Math.min(12, Math.max(0, dot(e, heads.severity.w) + heads.severity.b));

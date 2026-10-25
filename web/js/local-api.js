@@ -8,12 +8,13 @@
   const loadEngine = () => (engine = engine || import('/js/engine.mjs'));
 
   // ---------- storage ----------
-  const DB_NAME = 'dermedge', STORES = ['analyses', 'treatments'];
+  // v2 adds the DermEdge band's paired devices, recording sessions, readings and alerts
+  const DB_NAME = 'dermedge', STORES = ['analyses', 'treatments', 'band_devices', 'band_sessions', 'band_readings', 'band_alerts'];
   let dbp;
   function db() {
     return dbp = dbp || new Promise((res, rej) => {
-      const r = indexedDB.open(DB_NAME, 1);
-      r.onupgradeneeded = () => STORES.forEach(s => r.result.createObjectStore(s, { keyPath: 'id', autoIncrement: true }));
+      const r = indexedDB.open(DB_NAME, 2);
+      r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id', autoIncrement: true }); });
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
   }
@@ -26,6 +27,8 @@
   }
   const all = store => tx(store, 'readonly', s => s.getAll());
   const add = (store, v) => tx(store, 'readwrite', s => s.add(v));
+  const put = (store, v) => tx(store, 'readwrite', s => s.put(v));
+  const getOne = (store, id) => tx(store, 'readonly', s => s.get(id));
   async function removeWhere(store, pred) {
     const items = (await all(store)).filter(pred);
     await tx(store, 'readwrite', s => items.forEach(i => s.delete(i.id)));
@@ -48,6 +51,7 @@
     'stress (GSR wristband)': STRESS_TIP, 'stress (journal)': STRESS_TIP,
     'dry skin (moisture patch)': 'Your eczema patch is drier than healthy skin. Apply moisturiser now and after bathing.',
     'night scratching (IMU, simulated)': 'Scratching was detected overnight. Keep nails short and consider cotton gloves at night.',
+    'scratching (DermEdge band)': 'Your band picked up scratching. Keep nails short, and try a cool compress or moisturiser on the itchy spot instead.',
     'poor sleep': 'Short sleep. Aim for a cool bedroom and a regular bedtime tonight.',
     'new soap / product': 'You used a new product. If the skin reacts, stop using it and note it for your doctor.',
   };
@@ -171,12 +175,13 @@
     if (m.stress_p != null) t['stress (GSR wristband)'] = clip((m.stress_p - 0.25) / 0.2, 0, 1);
     if (m.hydration_deficit != null) t['dry skin (moisture patch)'] = clip(m.hydration_deficit / 8, 0, 1);
     if (m.night_scratches) t['night scratching (IMU, simulated)'] = clip(m.night_scratches / 30, 0, 1);
+    if (m.band_scratches) t['scratching (DermEdge band)'] = clip(m.band_scratches / 30, 0, 1);  // same scale as the hub
     return t;
   }
   async function startSim(name) {
     clearInterval(sim.timer); sim = { scenario: null, timer: null, k: 0 };
     if (!SCEN[name]) return;
-    stressModel = stressModel || await realFetch('/models/stress_model.json?v=2').then(r => r.json());
+    stressModel = stressModel || await realFetch('/models/stress_model.json?v=3').then(r => r.json());
     wear = fresh(); sim.scenario = name;
     const cfg = SCEN[name];
     const tick = () => {
@@ -193,6 +198,94 @@
              sim: { scenario: sim.scenario, available: true, missing: null, label: sim.scenario ? SCEN[sim.scenario].label : null,
                     source: sim.scenario ? 'Simulated wristband and moisture patch, scored by the WESAD stress model' : null },
              triggers: trig, trigger_index: index, alerts: alerts(trig, index) };
+  }
+
+  // ---------- the DermEdge band (mirrors app/band.py; no login: nothing leaves this browser) ----------
+  const BAND_ALERT_COOLDOWN = 30 * 60;  // seconds between flare alerts
+  const SCRATCH_WINDOW = 8 * 3600;      // scratch episodes count towards the trigger for 8 h
+  function bandScratch(ts) {
+    const cutoff = Date.now() / 1000 - SCRATCH_WINDOW;
+    wear.scratches = wear.scratches.filter(t => t >= cutoff).concat(ts >= cutoff ? [ts] : []);
+    wear.markers.band_scratches = wear.scratches.length;
+    wear.updated = Date.now() / 1000;
+  }
+  async function bandSession(s, withReadings) {
+    const readings = (await all('band_readings')).filter(r => r.session_id === s.id).sort((a, b) => a.ts - b.ts);
+    const out = { ...s, scratch_count: readings.filter(r => r.kind === 'scratch').length,
+                  duration_s: +(((s.stopped_at || Date.now() / 1000) - s.started_at)).toFixed(1) };
+    if (withReadings) {
+      out.scratch_events = readings.filter(r => r.kind === 'scratch').map(r => ({ ts: r.ts, duration_s: r.duration_s, intensity: r.intensity }));
+      out.motion_summary = readings.filter(r => r.kind === 'motion').map(r => ({ ts: r.ts, activity: r.activity, scratch_energy: r.scratch_energy }));
+    }
+    return out;
+  }
+  async function bandAlertCheck(sessionId) {
+    const st = state(), a = st.alerts;
+    if (a.level !== 'high') return null;
+    const now = Date.now() / 1000, last = Math.max(0, ...(await all('band_alerts')).map(x => x.ts));
+    if (now - last < BAND_ALERT_COOLDOWN) return null;
+    const alert = { session_id: sessionId, ts: now, level: a.level, risk: a.index, reasons: a.triggers, tips: a.tips, dismissed_at: null };
+    alert.id = await add('band_alerts', alert);
+    return alert;
+  }
+  async function bandRoute(p, method, body) {
+    const now = Date.now() / 1000;
+    let m;
+    if (p === '/api/band/devices' && method === 'POST') {
+      const id = String(body.device_id || '').slice(0, 64), name = String(body.name || 'DermEdge band').slice(0, 40);
+      if (id.length < 4) return json({ detail: 'device_id is required' }, 422);
+      const known = (await all('band_devices')).find(d => d.device_id === id);
+      const dev = Object.assign(known || { device_id: id, paired_at: now }, { name, last_seen: now });
+      dev.id = await put('band_devices', dev);
+      return json(dev);
+    }
+    if (p === '/api/band/devices') return json(await all('band_devices'));
+    if (p === '/api/band/sessions/start' && method === 'POST') {
+      const dev = (await all('band_devices')).find(d => d.device_id === body.device_id);
+      if (!dev) return json({ detail: 'Pair this band first' }, 404);
+      // starting while one is open returns that one, so a band press and a click don't make two
+      const open = (await all('band_sessions')).find(s => s.device === dev.id && s.stopped_at == null);
+      if (open) return json(await bandSession(open));
+      const s = { device: dev.id, started_at: Number(body.started_at) > 0 ? Math.min(body.started_at, now) : now, stopped_at: null,
+                  label: String(body.label || 'day').slice(0, 40), started_by: body.started_by === 'touch' ? 'touch' : 'website',
+                  notes: String(body.notes || '').slice(0, 200) };
+      s.id = await add('band_sessions', s);
+      return json(await bandSession(s));
+    }
+    if ((m = p.match(/^\/api\/band\/sessions\/(\d+)\/(stop|readings)$/)) && method === 'POST') {
+      const s = await getOne('band_sessions', +m[1]);
+      if (!s) return json({ detail: 'No such session' }, 404);
+      if (m[2] === 'stop') {
+        if (s.stopped_at == null) { s.stopped_at = now; await put('band_sessions', s); }
+        return json(await bandSession(s));
+      }
+      if (s.stopped_at != null) return json({ detail: 'This session has stopped' }, 409);
+      const when = x => Math.min(Math.max(x.ts != null ? x.ts : x.t != null ? s.started_at + x.t : now, s.started_at), now);
+      const scratches = (body.scratch_events || []).filter(e => e.duration_s >= 0 && e.intensity >= 0);
+      const motion = (body.motion || []).filter(x => x.activity >= 0 && x.scratch_energy >= 0);
+      await tx('band_readings', 'readwrite', st => {
+        scratches.forEach(e => st.add({ session_id: s.id, kind: 'scratch', ts: when(e), duration_s: +e.duration_s, intensity: +e.intensity }));
+        motion.forEach(x => st.add({ session_id: s.id, kind: 'motion', ts: when(x), activity: +x.activity, scratch_energy: +x.scratch_energy }));
+      });
+      scratches.forEach(e => bandScratch(when(e)));
+      return json({ stored: { scratch_events: scratches.length, motion: motion.length }, alert: await bandAlertCheck(s.id) });
+    }
+    if ((m = p.match(/^\/api\/band\/sessions\/(\d+)$/))) {
+      const s = await getOne('band_sessions', +m[1]);
+      return s ? json(await bandSession(s, true)) : json({ detail: 'No such session' }, 404);
+    }
+    if (p === '/api/band/sessions') {
+      const list = (await all('band_sessions')).sort((a, b) => b.started_at - a.started_at);
+      return json(await Promise.all(list.map(s => bandSession(s))));
+    }
+    if ((m = p.match(/^\/api\/band\/alerts\/(\d+)\/dismiss$/)) && method === 'POST') {
+      const a = await getOne('band_alerts', +m[1]);
+      if (!a) return json({ detail: 'No such alert' }, 404);
+      if (a.dismissed_at == null) { a.dismissed_at = now; await put('band_alerts', a); }
+      return json({ ok: true });
+    }
+    if (p === '/api/band/alerts') return json((await all('band_alerts')).sort((a, b) => b.ts - a.ts));
+    return json({ detail: 'not found' }, 404);
   }
 
   // ---------- sample history (synthetic check-ins, clearly labelled) ----------
@@ -234,7 +327,8 @@
   // "Delete all my data": every check, treatment, journal entry and setting on this device. The
   // downloaded models stay cached; they hold nothing about the user.
   async function wipe() {
-    const removed = { checks: (await all('analyses')).length, treatments: (await all('treatments')).length };
+    const removed = { checks: (await all('analyses')).length, treatments: (await all('treatments')).length,
+                      recordings: (await all('band_sessions')).length };
     await Promise.all(STORES.map(st => tx(st, 'readwrite', s => s.clear())));
     ['settings', 'journal', 'journal_at'].forEach(k => { try { localStorage.removeItem('dermedge.' + k); } catch (e) { /* nothing stored */ } });
     settings = { ...DEFAULT_SETTINGS }; journal = {}; journalAt = null;
@@ -333,19 +427,20 @@ img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-s
     if (p === '/api/state') return json(state());
     if (p === '/api/sim') { const s = readJSON().scenario; await startSim(s); return json(state()); }
     if (p === '/api/fairness') {
-      const h = await realFetch('/models/heads.json?v=2').then(r => r.json());
+      const h = await realFetch('/models/heads.json?v=3').then(r => r.json());
       return json({ before: h.fairness.before, after: h.fairness.after, offsets: h.rash.fst_offsets });
     }
     if (p === '/api/demo/seed') return json(await seed());
     if (p === '/api/demo/clear') return json(await clear());
     if (p === '/api/data/delete') return json(await wipe());
+    if (p.startsWith('/api/band/')) return bandRoute(p, (opts && opts.method) || 'GET', body ? readJSON() : {});
     return json({ error: 'not found' }, 404);
   }
 
   window.fetch = (input, opts) => {
     const url = typeof input === 'string' ? input : input.url;
     if (new URL(url, location.origin).pathname.startsWith('/api/')) return route(url, opts).catch(e => {
-      console.error(e); banner('Something went wrong running the models: ' + e.message, 1); return json({ error: String(e) }, 500);
+      console.error(e); banner('Something went wrong: ' + e.message, 1); return json({ error: String(e) }, 500);
     });
     return realFetch(input, opts);
   };

@@ -17,7 +17,7 @@ Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the
 ```
 ESP32-CAM / webcam ─► [1] Normal vs rash ─► [2] Eczema vs 7 look-alikes ─► [3] Severity 0–12
                                                                                │
-GSR wristband + moisture patch ─► stress, hydration, night scratching ──► Flare risk + tips
+DermEdge band + GSR, moisture ─► scratching, stress, hydration ──────────► Flare risk + tips
                                                                                │
                                                      Dashboard: history, body sites, doctor report
 ```
@@ -41,12 +41,14 @@ Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis
 At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI, even though it ranked them almost as well (AUC 0.91 vs 0.93). Choosing your skin type applies a calibrated threshold, which brings V–VI to **83%**. Details: `experiments/clip_rash_head/summary.json`.
 
 ## Features
-- Live camera with a rash / no-rash badge; auto-analyses when a rash is held in view
+- Live camera with a rash / no-rash badge, on only when you turn it on; auto-analyses when a rash is held in view
 - Photo quality check: asks for a retake when the photo is blurry, too dark or washed out
 - Grad-CAM heatmap of where the eczema model looked
 - "Not sure, see a dermatologist" when the models disagree or are uncertain
 - Body-site tracking with before/after comparison ("inner elbow 6.1 → 4.3, better")
 - Wearable markers: stress, heart rate, skin conductance, skin temperature, hydration deficit, night scratching
+- **DermEdge band**: connect it from the Home tab (Chrome or Edge, Web Bluetooth, a 6-digit pairing code); an ESP32 wristband that detects scratching from its accelerometer, starts and stops recordings from a touch pad or the app, buffers an hour offline, and shows flare alerts on its own screen
+- Accounts and paired bands: recordings, scratch events and alerts stored on the hub behind a login, with encrypted, passkey-paired Bluetooth to the band
 - Daily flare risk with alerts and one tip per active trigger
 - Skin-type calibration (Fitzpatrick I–VI)
 - Treatment log (moisturiser, steroid cream, antihistamine, wet wrap…) shown on the history chart
@@ -74,7 +76,13 @@ On macOS without Homebrew's `libomp`, LightGBM borrows PyTorch's copy (see `app/
 **Wearable simulation:** the *Calm day / Stressful day / Itchy night / Flare* buttons replay real recordings, which can't be redistributed here. To enable them, place the WESAD windows at `dataset/WESAD/wesad_raw_windows.npz` and the Southampton e-textile patient CSVs in `dataset/southampton_moisture/PatientTest/` (sources below). Without them, the buttons are disabled and the hub still accepts live data from the wristband.
 
 ## Firmware
-`firmware_dermedge/` has two ESP-IDF projects (ESP32-CAM screen and GSR wristband) and a shared WiFi/hub component. Build and flash with the VS Code ESP-IDF extension; see `firmware_dermedge/README.md`. Both projects build with ESP-IDF v5.4.1.
+`firmware_dermedge/` has two ESP-IDF projects: the **DermEdge band** and the **ESP32-CAM** screen. Both build with ESP-IDF v5.4.1; see `firmware_dermedge/README.md`.
+
+**The band** (`firmware_dermedge/band/`) is an ESP32 with a 1.8" ST7735 screen and an add-on board, on a breadboard. It detects scratching from an ADXL345 accelerometer (strong, rhythmic motion at 2.5-8 strokes a second, which rules out walking, typing and jolts), records sessions that start and stop from a touch pad or the app, and talks to the app over Bluetooth LE paired with a 6-digit code shown on its screen. The app relays readings to the hub (`app/band.py`), which stores them behind a login and raises flare alerts that the band shows. Its screens use the website's fonts and a deeper version of its palette:
+
+![The band's screens, rendered from the firmware by firmware_dermedge/band/test/preview.sh](firmware_dermedge/band/test/preview.png)
+
+Building an app for it? `docs/DERMEDGE_APP_GUIDE.md` has the features, the Bluetooth protocol and the hub API.
 
 ## Webcam-only demo
 ```bash
@@ -102,4 +110,4 @@ The training scripts in `scripts/` rebuild the product's models from the researc
 What the wearable datasets show, where to download them, and next steps for the wearable models: `docs/SENSOR_DATA.md`.
 
 ## Limitations
-DermEdge is a screening aid, not a diagnosis. The on-device models and the darker-skin calibration would benefit from more real-world photos, and the firmware is ready to flash but hasn't been tested on boards yet.
+DermEdge is a screening aid, not a diagnosis. The on-device models and the darker-skin calibration would benefit from more real-world photos, the ESP32-CAM firmware hasn't been tested on a board yet. The band runs on a breadboard, but its scratch detection is motion only at 100 Hz with thresholds not yet tuned on real recordings; the ADAM sensor study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021) found the clearest scratch signal is a 100-800 Hz skin vibration that 100 Hz sampling misses, including finger-only scratching. Faster sampling (the ADXL345 goes to 3200 Hz) is the planned fix.

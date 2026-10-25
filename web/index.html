@@ -9,9 +9,10 @@
 <script src="/static/chart.umd.min.js"></script>
 <!-- Browser version: the models run on this device (js/engine.mjs) and js/local-api.js answers the
      dashboard's /api calls locally, so no server is involved. -->
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
 <script src="/js/wearable-core.js"></script>
 <script src="/js/local-api.js"></script>
+<script src="/js/band.js"></script>
 <style>
   /* Layout: a blush page, white cards with a rose border, plum ink. Serif for names and numbers,
      a rounded sans for everything else. Colours are tokens; dark mode swaps the tokens only. */
@@ -79,6 +80,9 @@
   .badge { position: absolute; top: 12px; left: 12px; padding: 7px 14px; border-radius: 999px; font-weight: 700;
            font-size: 16px; letter-spacing: .02em; background: rgba(30, 12, 20, .72); color: #fff; }
   .badge.rash { background: var(--bad); } .badge.normal { background: var(--ok); } .badge.warn { background: var(--warn); }
+  .cam-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             gap: 10px; padding: 20px; text-align: center; color: #fff; }
+  .cam-off p { margin: 0; max-width: 34ch; font-size: 14px; opacity: .85; }
 
   .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
   .btn { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 9px 16px;
@@ -157,6 +161,14 @@
 
   /* treatments + insights */
   .tx-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* home: the band card */
+  .phase { font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--neutral-bg); color: var(--muted); }
+  .phase.on { background: var(--ok-bg); color: var(--ok); } .phase.busy { background: var(--warn-bg); color: var(--warn); }
+  .phase.rec { background: var(--bad-bg); color: var(--bad); }
+  .pair-box { margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: var(--accent-soft); font-size: 14px; }
+  .pair-box b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .band-note { font-size: 13px; color: var(--bad); margin-top: 10px; }
+  .home-steps { margin: 10px 0 0; padding-left: 20px; font-size: 14px; } .home-steps li { margin: 4px 0; }
   .tx-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
   .tx-list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--neutral-bg); }
   .insight { padding: 12px 14px; border-radius: 16px; background: var(--neutral-bg); margin-top: 10px; font-size: 14px; }
@@ -237,7 +249,8 @@
     <div><h1>DermEdge</h1><div class="tag">Runs entirely in your browser · photos never leave this device</div></div>
   </div>
   <nav>
-    <button data-tab="check" class="on">Check</button>
+    <button data-tab="home" class="on">Home</button>
+    <button data-tab="check">Check</button>
     <button data-tab="history">History</button>
     <button data-tab="triggers">Wearable &amp; care</button>
     <button data-tab="report">Doctor report</button>
@@ -246,8 +259,54 @@
 </header>
 
 <main>
+  <!-- HOME: connect the band, then check skin -->
+  <section class="tab on" id="tab-home">
+    <div class="card">
+      <h2>Welcome to DermEdge</h2>
+      <p class="lead">Connect your DermEdge band to track scratching, or check a patch of skin with your camera. Everything stays on this device.</p>
+    </div>
+    <div class="grid" style="margin-top:20px">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+          <h2 style="margin:0">Your band</h2>
+          <span class="phase" id="bandPhase">Not connected</span>
+        </div>
+        <ol class="home-steps" id="bandSteps">
+          <li>Switch the band on. Its screen says <b>Connect</b>.</li>
+          <li>Click <b>Connect band</b> and choose <b>DermEdge</b> in the list.</li>
+          <li>Type the 6-digit code from the band's screen when your computer asks.</li>
+        </ol>
+        <div class="pair-box" id="bandPair" hidden><b>Enter the pairing code</b>Your computer is asking for the 6-digit code shown on the band's screen. Type it there to finish pairing.</div>
+        <div class="tiles" id="bandTiles"></div>
+        <div id="bandMove" hidden>
+          <div class="row"><span id="bandMoveLabel">Movement</span><b id="bandMoveVal">–</b></div>
+          <div class="meter"><div id="bandMoveBar" style="width:0;background:var(--sage, var(--accent))"></div></div>
+        </div>
+        <div class="controls">
+          <button class="btn primary" id="bandConnect">Connect band</button>
+          <select id="bandLabel" hidden aria-label="What you're recording">
+            <option value="day">Daytime</option><option value="sleep">Sleep</option><option value="test">Test</option>
+          </select>
+          <button class="btn primary" id="bandStart" hidden>Start recording</button>
+          <button class="btn" id="bandStop" hidden>Stop recording</button>
+          <button class="btn" id="bandDisconnect" hidden>Disconnect</button>
+        </div>
+        <div id="bandAlert"></div>
+        <div class="band-note" id="bandError" hidden></div>
+        <div class="disclaimer" id="bandSupport">Needs Chrome or Edge on a computer or Android phone (not Safari or iPhone). You can also start and stop by holding the band's touch pad for 2 seconds. Readings stay in this browser.</div>
+      </div>
+      <div class="card">
+        <h2>Check your skin</h2>
+        <p class="muted" style="margin:6px 0 12px">Hold a patch of skin up to the camera for a rash check, eczema vs look-alikes and a severity score. The camera turns on only when you ask.</p>
+        <button class="btn primary" id="goCheck">Open the skin check</button>
+        <h2 style="margin-top:24px">Recent recordings</h2>
+        <ul class="tx-list" id="bandSessions"><li class="muted">No recordings yet.</li></ul>
+      </div>
+    </div>
+  </section>
+
   <!-- CHECK -->
-  <section class="tab on" id="tab-check">
+  <section class="tab" id="tab-check">
     <div class="grid">
       <div class="card">
         <h2>Live camera · stage 1: normal vs rash</h2>
@@ -255,11 +314,16 @@
           <video id="video" autoplay playsinline muted></video>
           <div class="box"></div>
           <div class="scan" id="scan" hidden></div>
-          <div class="badge" id="badge">Starting camera…</div>
+          <div class="badge" id="badge" hidden>Camera off</div>
+          <div class="cam-off" id="camOff">
+            <button class="btn primary" id="camStart">Turn on camera</button>
+            <p>The camera only runs while you use it here, and frames never leave this device.</p>
+          </div>
         </div>
         <div class="controls">
           <button class="btn primary" id="analyzeBtn">Analyse now</button>
           <label class="btn" for="upload">Upload photo</label>
+          <button class="btn" id="camStop" hidden>Turn off camera</button>
           <input type="file" id="upload" accept="image/*" hidden>
           <label class="toggle"><input type="checkbox" id="auto" checked> Auto-analyse when a rash is held in view</label>
         </div>
@@ -473,6 +537,8 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "report") loadFairness();
   if (b.dataset.tab === "triggers") { loadState(); loadTreatments(); }
   if (b.dataset.tab !== "about") $("wipeConfirm").hidden = true;
+  if (b.dataset.tab !== "check") stopCamera();
+  if (b.dataset.tab === "home") loadBandSessions();
 });
 document.querySelectorAll("[data-goto]").forEach(a => a.onclick = e => {
   e.preventDefault(); document.querySelector(`nav button[data-tab="${a.dataset.goto}"]`).click();
@@ -480,16 +546,31 @@ document.querySelectorAll("[data-goto]").forEach(a => a.onclick = e => {
 
 // camera
 const video = $("video");
+// The camera never starts on its own: only from "Turn on camera", and it stops when the user
+// turns it off or leaves the Check tab, so the browser's camera light means someone asked for it.
 async function startCamera() {
+  $("camStart").disabled = true;
   try {
     video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
-    $("badge").textContent = "Looking…";
+    $("camOff").hidden = true; $("camStop").hidden = false;
+    const b = $("badge"); b.hidden = false; b.className = "badge"; b.textContent = "Looking…";
+    $("camNote").textContent = "Hold the skin inside the white box, 10–15 cm away.";
     loop();
   } catch (e) {
-    $("badge").textContent = "No camera";
     $("camNote").textContent = "Camera blocked or missing: allow it in the browser, or use Upload photo.";
   }
+  $("camStart").disabled = false;
 }
+
+function stopCamera() {
+  if (!video.srcObject) return;
+  video.srcObject.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  $("badge").hidden = true; $("camOff").hidden = false; $("camStop").hidden = true;
+  rashStreak = 0;
+}
+$("camStart").onclick = startCamera;
+$("camStop").onclick = stopCamera;
 
 function crop(size) {
   // the square under the on-screen box, un-mirrored. The box is 45% of the 4:3 frame's width,
@@ -507,8 +588,11 @@ async function post(url, blob) {
   return r.json();
 }
 
+let looping = false;
 async function loop() {
-  while (true) {
+  if (looping) return;
+  looping = true;
+  while (video.srcObject) {
     if (video.videoWidth && !busy) {
       try {
         const s = await post("/api/screen", await crop(320));
@@ -522,10 +606,11 @@ async function loop() {
     }
     await new Promise(r => setTimeout(r, 800));  // CLIP in the browser takes a few hundred ms a frame
   }
+  looping = false;
 }
 
 async function analyseCamera() {
-  if (!video.videoWidth) return;
+  if (!video.videoWidth) { $("camNote").textContent = "Turn on the camera first, or use Upload photo."; return; }
   analyse(await crop(448), "webcam");
 }
 
@@ -760,6 +845,7 @@ function renderState(s) {
     tile("Skin temperature", m.skin_temp != null ? m.skin_temp + " °C" : "–", "wrist"),
     tile("Hydration deficit", m.hydration_deficit != null ? m.hydration_deficit + "%" : "–", "eczema patch vs healthy skin"),
     tile("Night scratches", m.night_scratches ?? 0, "IMU bursts (simulated)"),
+    ...(m.band_scratches != null ? [tile("Band scratch episodes", m.band_scratches, "DermEdge band, last 8 h")] : []),
   ].join("") : "";
   const pts = s.wearable.series;
   const data = { labels: pts.map(p => new Date(p.t * 1000).toLocaleTimeString()),
@@ -777,6 +863,55 @@ function renderState(s) {
     <div class="meter"><div style="width:${v * 100}%;background:var(--warn)"></div></div>`).join("") ||
     '<div class="muted" style="margin-top:10px">No triggers yet.</div>';
 }
+// ---------- the band (js/band.js) ----------
+const PHASES = { idle: ["Not connected", ""], choosing: ["Choose the band…", "busy"], connecting: ["Connecting…", "busy"],
+                 pairing: ["Waiting for the code", "busy"], reconnecting: ["Reconnecting…", "busy"] };
+const BAND_STATES = { pairing: "Pairing", ready: "Ready", recording: "Recording", syncing: "Syncing", error: "Sensor problem", boot: "Starting" };
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+let bandSessionsSeen = -1;
+function renderBand(b) {
+  const s = b.status, on = b.phase === "connected", rec = on && s && s.s === "recording";
+  const [label, cls] = on ? [s ? `${BAND_STATES[s.s] || s.s}${rec ? " " + mmss(s.el) : ""}` : "Connected", rec ? "rec" : "on"] : PHASES[b.phase] || PHASES.idle;
+  $("bandPhase").textContent = label; $("bandPhase").className = "phase " + cls;
+  $("bandSteps").hidden = on; $("bandPair").hidden = b.phase !== "pairing";
+  $("bandConnect").hidden = on || b.phase === "reconnecting";
+  $("bandConnect").disabled = !b.supported || ["choosing", "connecting", "pairing"].includes(b.phase);
+  $("bandDisconnect").hidden = !on && b.phase !== "reconnecting";
+  $("bandStart").hidden = $("bandLabel").hidden = !on || rec || (s && s.s === "error");
+  $("bandStop").hidden = !rec;
+  $("bandTiles").innerHTML = on && s ? [
+    tile("Scratch episodes", s.n, rec ? "this recording" : "last recording"),
+    tile("Recorded", rec ? mmss(s.el) : "–", s.src === "touch" ? "started on the band" : "started here"),
+    tile("Waiting to sync", s.q, s.q ? "readings on the band" : "all saved here"),
+  ].join("") : "";
+  $("bandMove").hidden = !on || !s;
+  if (on && s) {
+    const level = Math.min(1, s.act / 0.6);
+    $("bandMoveVal").textContent = s.act.toFixed(2) + " g";
+    $("bandMoveBar").style.width = (level * 100) + "%";
+  }
+  $("bandAlert").innerHTML = b.alert ? alertHtml({ level: b.alert.level, triggers: b.alert.reasons, tips: b.alert.tips }) +
+    '<div class="controls"><button class="btn" id="bandDismiss">Dismiss alert</button></div>' : "";
+  if (b.alert) $("bandDismiss").onclick = () => DermBand.dismissAlert();
+  $("bandError").hidden = !b.error; $("bandError").textContent = b.error || "";
+  if (!b.supported) $("bandSupport").textContent = "This browser can't use Bluetooth. Open DermEdge in Chrome or Edge on a computer or Android phone.";
+  if (b.sessionsChanged !== bandSessionsSeen) { bandSessionsSeen = b.sessionsChanged; loadBandSessions(); }
+}
+async function loadBandSessions() {
+  const list = await (await fetch("/api/band/sessions")).json();
+  const when = t => new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const names = { day: "Daytime", sleep: "Sleep", test: "Test" };
+  $("bandSessions").innerHTML = list.length ? list.slice(0, 6).map(x => `<li><span>${when(x.started_at)} · ${names[x.label] || x.label}${x.stopped_at ? "" : " · recording"}</span>
+    <span>${Math.round(x.duration_s / 60)} min · ${x.scratch_count} scratch${x.scratch_count === 1 ? "" : "es"}</span></li>`).join("")
+    : '<li class="muted">No recordings yet.</li>';
+}
+$("bandConnect").onclick = () => DermBand.connect();
+$("bandDisconnect").onclick = () => DermBand.disconnect();
+$("bandStart").onclick = () => DermBand.start($("bandLabel").value).catch(e => alert(e.message));
+$("bandStop").onclick = () => DermBand.stop().catch(e => alert(e.message));
+$("goCheck").onclick = () => document.querySelector('nav button[data-tab="check"]').click();
+DermBand.onChange(renderBand);
+
 async function loadState() { renderState(await (await fetch("/api/state")).json()); }
 const json = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
 document.querySelectorAll(".btn.sim").forEach(b => b.onclick = async () => renderState(await json("/api/sim", { scenario: b.dataset.s })));
@@ -845,7 +980,6 @@ function applyPreferredSite() {
   if (!prefs.onboarded) { obStep = 0; obRender(); $("onboard").hidden = false; }
   loadTreatments();
 })();
-startCamera();
 </script>
 </body>
 </html>

@@ -6,7 +6,8 @@ Code DermEdge no longer builds or ships, kept for reference.
   and motion at the WESAD rates and posted 30 s windows to the hub's stress model over Wi-Fi
   (simulated sensors by default). The DermEdge band (`firmware_dermedge/band/`, Bluetooth to the
   app) replaced it. Its GSR and stress code comes back into the band when the GSR sensor is
-  added. It still builds with `idf.py build` from its folder.
+  added. It still builds with `idf.py build` from its folder. `HARDWARE_GUIDE.md` is its hardware
+  guide (signals the hub expects, adding an LM35, recording scratching).
 
 ## gsr_wristband_wifi options (menuconfig: DermEdge wristband)
 - **GSR source**: simulated, or a Grove GSR module on ADC1 channel 6 (GPIO34).

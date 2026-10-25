@@ -29,6 +29,8 @@ Endpoints
   GET  /api/sites         first vs latest severity per body site
   POST /api/demo/seed     add four weeks of sample check-ins (marked sample) / clear them
   GET  /report            printable doctor report (browser: Print -> Save as PDF)
+  /api/auth/*, /api/band/*     accounts, paired bands, recording sessions, readings and alerts,
+                               all behind a login (app/band.py)
 
 Data lives in app/data/ (SQLite + images), which git ignores.
 """
@@ -53,6 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import features  # noqa: E402
 from pipeline import SkinPipeline, flare_risk, trigger_scores  # noqa: E402
 from wearable import Simulator, Wearable  # noqa: E402
+from band import make_router  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parent
 DATA_DIR = APP_DIR / "data"
@@ -71,6 +74,9 @@ simulator = Simulator(wearable)
 state = {"journal": {}, "journal_at": None}
 SETTINGS_DEFAULT = {"fitzpatrick": None, "sites": [], "consent": False, "onboarded": False}
 settings = dict(SETTINGS_DEFAULT, **(json.loads(SETTINGS_PATH.read_text()) if SETTINGS_PATH.exists() else {}))
+# Band scratch events feed the same trigger model as /api/wearable/scratch, and its flare alerts
+app.include_router(make_router(DB_PATH, on_scratch=wearable.scratch,
+                               flare_alert=lambda: api_state()["alerts"]))
 
 
 def db():

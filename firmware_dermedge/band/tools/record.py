@@ -56,7 +56,7 @@ class Band:
         self.ser.dtr = self.ser.rts = False  # don't reset the ESP32 by opening the port
         self.ser.open()
         self.buf, self.next_seq = bytearray(), None
-        self.gaps = self.overruns = self.rejected = 0
+        self.gaps = self.overruns = self.rejected = self.restarts = 0
         self.samples, self.lock, self.running = [], threading.Lock(), True
         self.thread = threading.Thread(target=self._pump, daemon=True)
         self.thread.start()
@@ -133,11 +133,20 @@ class Band:
         return np.concatenate(out) if out else np.zeros((0, 3), np.int16)
 
     def capture(self, seconds, live=None):
+        """Records for `seconds`. If the stream stops (a tugged cable restarts the band, and it
+        boots with streaming off), asks for it again; self.restarts counts how often."""
         self.take()  # drop what queued up while waiting
-        got, t0 = [], time.time()
+        got, t0, last = [], time.time(), time.time()
         while time.time() - t0 < seconds:
             time.sleep(0.05)
-            got.append(self.take())
+            x = self.take()
+            got.append(x)
+            if len(x):
+                last = time.time()
+            elif time.time() - last > 1.0:
+                self.ser.write(b"raw on\n")
+                self.restarts += 1
+                last = time.time()
             if live:
                 live(time.time() - t0)
         return np.concatenate(got)
@@ -182,10 +191,16 @@ def session(band, rounds, seconds, person, hand, into=None, only=None):
                     time.sleep(1)
                 print("  GO")
                 bar = lambda t: print(f"\r  recording {'#' * int(t)}{'.' * (seconds - int(t))} ", end="", flush=True)
-                l0 = band.lost()
+                l0, r0 = band.lost(), band.restarts
                 x = band.capture(seconds, bar)
-                lost = band.lost() - l0
-                print(f"\r  done: {len(x)} samples{f', {lost} dropouts' if lost else ''}" + " " * 20)
+                lost, stalls = band.lost() - l0, band.restarts - r0
+                if len(x) < 0.9 * seconds * FS:
+                    # never save a clip that's mostly missing: that's how 12 empty clips happened
+                    print(f"\r  Only {len(x) / FS:.1f} of {seconds} s arrived{' (the band stopped streaming and restarted)' if stalls else ''}."
+                          f"\n  Check the cable and the add-on board's wires (tape them to the arm), then redo it.")
+                    continue
+                print(f"\r  done: {len(x)} samples{f', {lost} dropouts' if lost else ''}"
+                      f"{f', the stream stalled {stalls}x and recovered' if stalls else ''}" + " " * 20)
                 again = input("  Keep it? [Enter = yes, r = redo] ").strip().lower()
                 if again != "r":
                     break

@@ -6,6 +6,14 @@ is derm-edge.vercel.app (the v2 skin model is live).
 
 Tick items off in this file as you go (edit, commit, push), so everyone sees the state.
 
+**Demo, decided (31 Oct, 4 am):** the demo video is **skin check only**:
+[`docs/demo/DermEdge_demo_partA.mp4`](demo/DermEdge_demo_partA.mp4) (41 s, 1080p, captions, no
+audio; we talk over it live). It shows the phone app (healthy skin → no rash, a rash captured
+automatically → eczema + severity), then the laptop with three labelled uploads: eczema on darker
+skin → likely eczema + heatmap, fungal infection → look-alike, psoriasis → look-alike.
+**The band is not filmed.** Shreeya puts Tishya's photo of the band and screenshots of the
+website's band / sensor readings straight onto the hardware slides (9-10) instead of a video.
+
 **The story for the sensors (decided):** we don't train or show a model on our own sensors. The
 band **collects data for the doctor** (scratching, heart rate and HRV from the ECG, skin
 temperature), and models come later once that data pools. The one sensor-to-eczema result we

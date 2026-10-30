@@ -115,6 +115,8 @@ The training scripts in `scripts/` rebuild the product's models from the researc
 - **Southampton e-textile AD sensor data** (Todorov 2026, CC-BY, DOI 10.5258/SOTON/D3873): moisture readings on eczema vs healthy skin.
 - **MegPaulson/Healthy_Skin** (Hugging Face): extra healthy-skin close-ups, filtered.
 
+Download links and licences for every dataset: `DATASETS.md`.
+
 What the wearable datasets show, where to download them, and next steps for the wearable models: `docs/SENSOR_DATA.md`.
 
 ## Limitations

@@ -74,6 +74,8 @@
   .cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cam video.mirror { transform: scaleX(-1); }  /* only the selfie camera / webcam, so it moves like a mirror */
   .cam:not(.live) .box, .cam:not(.live) .scan { display: none; }  /* the target box only over a live picture */
+  .cam.flash::after { content: ""; position: absolute; inset: 0; background: #fff; pointer-events: none; animation: shutter .4s ease-out forwards; }
+  @keyframes shutter { from { opacity: .85; } to { opacity: 0; } }
   .flip { position: absolute; top: 10px; right: 10px; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
           display: grid; place-items: center; background: rgba(10, 26, 25, .72); color: #fff; }
   .flip:hover { background: rgba(10, 26, 25, .9); }
@@ -631,6 +633,9 @@ const $ = id => document.getElementById(id);
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 let rashStreak = 0, lastAnalyse = 0, busy = false, chart;
+// Phones take about a second per frame already, so the live check runs back to back there;
+// laptops pause between frames. Two rash frames in a row take the photo automatically.
+const PHONE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent), FRAME_PAUSE = PHONE ? 120 : 800, AUTO_FRAMES = 2;
 
 // tabs
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
@@ -723,12 +728,19 @@ async function loop() {
         const b = $("badge");
         const q = s.quality || { ok: true, issues: [] };
         if (!q.ok) { b.className = "badge warn"; b.textContent = q.issues.includes("blurry") ? "Hold still" : q.issues.includes("too_dark") ? "More light" : "Too bright"; rashStreak = 0; }
-        else if (s.skin && s.p_rash >= 0.5) { b.className = "badge rash"; b.textContent = `RASH ${Math.round(s.p_rash * 100)}%`; rashStreak++; }
+        else if (s.skin && s.p_rash >= 0.5) {
+          rashStreak++;
+          b.className = "badge rash";
+          b.textContent = `RASH ${Math.round(s.p_rash * 100)}%` + ($("auto").checked && rashStreak < AUTO_FRAMES && Date.now() - lastAnalyse > 8000 ? " · hold still" : "");
+        }
         else { b.className = "badge normal"; b.textContent = s.skin ? `NO RASH ${Math.round((1 - s.p_rash) * 100)}%` : "NO RASH"; rashStreak = 0; }
-        if ($("auto").checked && rashStreak >= 4 && Date.now() - lastAnalyse > 8000) analyseCamera();
+        if ($("auto").checked && rashStreak >= AUTO_FRAMES && Date.now() - lastAnalyse > 8000) {
+          const cam = $("cam"); cam.classList.remove("flash"); void cam.offsetWidth; cam.classList.add("flash");  // shutter
+          analyseCamera();
+        }
       } catch (e) { /* server restarting; try again */ }
     }
-    await new Promise(r => setTimeout(r, 800));  // CLIP in the browser takes a few hundred ms a frame
+    await new Promise(r => setTimeout(r, FRAME_PAUSE));
   }
   looping = false;
 }
@@ -742,7 +754,10 @@ async function analyse(blob, source) {
   busy = true; lastAnalyse = Date.now(); rashStreak = 0;
   const site = $("site").value;
   $("scan").hidden = false;
-  try { show(await post("/api/analyze?source=" + source + (site ? "&site=" + site : ""), blob)); }
+  try {
+    show(await post("/api/analyze?source=" + source + (site ? "&site=" + site : ""), blob));
+    if (PHONE) $("result").scrollIntoView({ behavior: "smooth", block: "start" });  // it sits below the camera there
+  }
   finally { busy = false; $("scan").hidden = true; }
 }
 

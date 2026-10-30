@@ -12,7 +12,12 @@ to paste in, and the diagram to place. Diagrams are in `docs/architecture/` (320
   future scope**; its slide is replaced by the DermEdge band.
 - The **"GSR wristband"** is now the **DermEdge band**: an ESP32 on the back of the hand that
   detects scratching with a model trained on our recordings, over encrypted Bluetooth.
-- **Skin temperature is a stress input only** (one thermistor), not an eczema signal.
+- **Skin temperature is a stress input only** (one LM35, since 31 Oct; was a thermistor), not an eczema signal.
+- **31 Oct: ECG replaces GSR** for stress, and skin moisture is dropped. The stress model is being
+  retrained on WESAD's chest ECG; until its numbers are in, the GSR figures below are marked as
+  the previous model and must be swapped or caveated before presenting.
+- **31 Oct: the skin model runs in tiers:** full CLIP model on laptops (WebGPU), a ~17 MB phone
+  model that copies CLIP's embedding on phones ([TONIGHT_PLAN.md](TONIGHT_PLAN.md)).
 - **Stress numbers:** quote the band's GSR model (90% accuracy, 73% of stress caught), not the old
   four-signal LightGBM's AUC 0.92-0.94. That model turned out to call 50% of meditation and
   amusement windows "stress": it had partly learned "later in the session"
@@ -74,6 +79,7 @@ Image score × trigger index → flare risk + tips → dashboard, band alert, do
 **INNOVATION & TECHNOLOGY**
 - Skin-tone calibration: darker-skin rash detection from 67% to 83%
 - Runs in the browser, offline after one download, as an installable app: no photo leaves the device
+- Sized to the device: the full model on laptops, a 17 MB phone model that gives the same embedding, so the same heads and skin-tone calibration apply
 - A scratch detector trained on our own recordings, running on the band's ESP32
 - CLIP, ResNet18 and a calibrated stress model, fused into one flare score
 
@@ -81,8 +87,8 @@ Image score × trigger index → flare risk + tips → dashboard, band alert, do
 
 **1 INPUT**
 - Skin photo (phone or laptop camera)
-- DermEdge band: accelerometer (scratching); GSR and a skin-temperature thermistor (stress, being added)
-- Moisture patch (planned), journal, skin type
+- DermEdge band: accelerometer (scratching); ECG and an LM35 skin-temperature sensor (stress, being added)
+- Journal, skin type
 
 **2 PROCESSING**
 - Blur and lighting quality gate
@@ -154,7 +160,7 @@ offline buffering, encrypted Bluetooth, and alerts on its own screen.
 | Normal vs rash | AUC 0.93; 1,182 of 1,444 rashes caught, 84 of 90 healthy cleared | SCIN phone photos, 5-fold CV grouped by case |
 | Eczema vs look-alikes | 81.1% accuracy, 82.5% recall | 507-image test split |
 | Severity | Mean error 1.2 / 12; within one band 97.6% | Held-out validation set |
-| Stress (band GSR) | 90% accuracy; 73% of stress caught | WESAD, leave-one-person-out, 15 people |
+| Stress (GSR model; ECG retrain pending) | 90% accuracy; 73% of stress caught | WESAD, leave-one-person-out, 15 people |
 | Scratching | 4 of 4 scratch clips, 0 false episodes in 12 others | One wearer, held-out round |
 | Moisture | Eczema skin read lower in 13 of 13 patients | Southampton e-textile study |
 
@@ -214,7 +220,7 @@ clinically validated yet.
 
 **IMPLEMENTATION ROADMAP**
 1. Person-by-person scratch test and the volunteer pilot
-2. GSR and the skin-temperature thermistor on the band, then the stress model on live data
+2. ECG and the LM35 on the band, then the ECG stress model on live data
 3. Dermatologist validation study, then a 2-4 week wear study
 4. Off the breadboard: a PCB band
 

@@ -140,13 +140,8 @@ function clipPixels(bmp) {
   return x;
 }
 
-let lastRunMs = Infinity;  // how long the last single-photo CLIP run took
 async function embedPixels(x) {
-  const out = await serial(async () => {
-    const t = performance.now(), o = await clip.run({ pixel_values: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) });
-    lastRunMs = performance.now() - t;
-    return o;
-  });
+  const out = await serial(() => clip.run({ pixel_values: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) }));
   const e = Array.from(out.image_embeds.data), n = Math.hypot(...e);
   return e.map(v => v / n);
 }
@@ -158,7 +153,7 @@ const eczemaLogit = e => dot(e, heads.eczema.w) + heads.eczema.b;
 // Occlusion map for stage 2: cover one cell of an n x n grid at a time with CLIP's mean colour
 // (0 after normalising) and see how far the eczema-vs-look-alike score moves away from its
 // answer. Cells that move it most are what the decision rested on. The n*n covered copies go
-// through CLIP as one batch, and only where CLIP has the GPU.
+// through CLIP as one batch. Laptops only: a 4 x 4 grid on WebGPU, 3 x 3 on WebAssembly.
 async function occlusionMap(x, base, n = 4) {
   const dir = base >= 0 ? 1 : -1, cell = 224 / n, N = 3 * 50176, batch = new Float32Array(n * n * N);
   for (let k = 0; k < n * n; k++) {
@@ -241,8 +236,7 @@ export async function analyze(blob, fitzpatrick) {
   if (s.skin && s.p_rash >= 0.5) {
     const z = eczemaLogit(e), p = sigmoid(z);
     res.p_eczema = +p.toFixed(3);
-    // 16 more photos through CLIP: only on a GPU fast enough to do it in about a second
-    if (backend === 'WebGPU' && lastRunMs < 80) cam = await occlusionMap(x, z);
+    if (!MOBILE) cam = await occlusionMap(x, z, backend === 'WebGPU' ? 4 : 3);
     if (p >= 0.5) {
       const score = Math.min(12, Math.max(0, dot(e, heads.severity.w) + heads.severity.b));
       const band = heads.severity.classes[score < heads.severity.band_edges[0] ? 0 : score < heads.severity.band_edges[1] ? 1 : 2];

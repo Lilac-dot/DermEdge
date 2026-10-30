@@ -120,7 +120,9 @@ class Student(nn.Module):
         super().__init__()
         import timm
         self.body = timm.create_model(arch, pretrained=True, num_classes=0)
-        self.proj = nn.Linear(self.body.num_features, dim)
+        with torch.no_grad():  # MobileNetV3's pooled output (1280) isn't its num_features (960)
+            width = self.body.eval()(torch.zeros(1, 3, 224, 224)).shape[1]
+        self.proj = nn.Linear(width, dim)
 
     def forward(self, pixel_values):  # CLIP-normalised input, like the browser sends
         return self.proj(self.body(pixel_values))

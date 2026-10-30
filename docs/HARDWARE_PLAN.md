@@ -3,7 +3,9 @@
 Where the hardware stands, which sensors are coming and on which pins, and how the pieces talk.
 For building an app against it, see [DERMEDGE_APP_GUIDE.md](DERMEDGE_APP_GUIDE.md); for the
 band's firmware, [firmware_dermedge/band/README.md](../firmware_dermedge/band/README.md). What the
-wearable datasets show and how we augment and validate: [SENSOR_DATA.md](SENSOR_DATA.md).
+wearable datasets show and how we augment and validate: [SENSOR_DATA.md](SENSOR_DATA.md). Every
+sensor on the band, with its wiring, specs, bench results and the research for and against it:
+[SENSORS.md](SENSORS.md).
 
 ## Decisions log
 
@@ -11,6 +13,8 @@ Newest first. Each decision is reflected in the sections below.
 
 | Date | Decision | Why |
 |---|---|---|
+| 31 Oct 2026 | **ECG electrodes on both wrists (Lead I), read as a seated 1-2 minute stress check, not all day.** The module is an **AD8232**. Pins moved: OUTPUT to GPIO 32, LO+ to 33, LO− to 34, SDN tied to 3V3 (Tishya). | One wrist can't record ECG; both wrists is standard Lead I, and HR/HRV only need beat timing, which Lead I gives (an Apple Watch's Lead I matched a 3-lead reference within 1.15% for beat timing at rest). Movement and arm-muscle noise rule out continuous wear. Our ESP32 board doesn't break out GPIO 36/39. |
+| 31 Oct 2026 | **The lesion-vs-healthy temperature pair is dropped**, not just future scope. One LM35 on the wrist, on GPIO 35. | The research on lesion temperature is thin and points both ways (inflamed skin runs warmer; atopic skin also shows vasoconstriction), matching the dermatologists' advice, and no dataset links it to flares. |
 | 31 Oct 2026 | **The skin model runs in device tiers** ([TONIGHT_PLAN.md](TONIGHT_PLAN.md)): laptops keep CLIP ViT-B/16 + ResNet18 on WebGPU; phones get a ~17 MB MobileNetV3 trained on SCIN to copy CLIP's embedding, so every existing head works on it unchanged (Shreeya, Colab); the ESP32-CAM's 300 KB model stays a future-scope slide. The website picks the tier itself, with a Settings switch for the full model on a strong phone. **DermLIP** (ViT-B/16 and PanDerm-base) gets the same heads on the same data and replaces CLIP only if it ties or wins on held-out photos for all three stages and the skin-type check (Nitish). | Phones were slow or failed to load the 90 MB CLIP model. Copying the embedding avoids relabelling and retraining every head; switching to DermLIP only on a tie or win keeps the published results valid. |
 | 31 Oct 2026 | **ECG replaces GSR as the stress sensor; skin moisture is dropped.** The band's sensors are now the ADXL345 (scratching), ST7735 screen, capacitive touch pad, ECG (stress) and LM35 (skin temperature) on the ESP32 (Tishya). The stress model is retrained on WESAD's chest ECG (heart rate and HRV) with wrist temperature and motion. | Tishya's call. WESAD recorded chest ECG on the same 15 subjects, so the model can be retrained without new data. The pitch deck's GSR model figures no longer describe the band once this lands. |
 | 31 Oct 2026 | **LM35, not the NTC thermistor** (reverses 25 Oct). Still one sensor, for the stress model. | Tishya's call. The LM35 is linear (10 mV/°C, no lookup) and needs only one pin. It runs on 5V; its output stays under 0.4 V at skin temperature, safe for the ADC. |
@@ -75,8 +79,8 @@ The other diagrams: [stage 1](architecture/1_stage1_clip_rash.png),
 | 1.8" ST7735 TFT, red V1.1 board | working | VCC on **5V** (its regulator starves the panel on 3V3: white screen); RGB order (pink showed as lilac in BGR) |
 | Add-on board: ADXL345 accelerometer | working, 800 Hz | CS to 3V3 (I2C mode) and SDO to GND (address 0x53), or it drops off the bus |
 | Add-on board: 4-pad touch module (OUT1-OUT4) | OUT1 working | Hold 2 s: start/stop, tap: next view, double tap: dismiss. OUT2-4 could become real buttons if pins allow |
-| LM35 temperature sensor | to wire | Skin temperature for the stress model. +Vs on **5V** (needs at least 4 V), output on GPIO 35 |
-| ECG module (AD8232 assumed, to confirm) | to wire | Stress, from heart rate and HRV. Electrode placement still to decide (§5) |
+| LM35 temperature sensor | wired, reads on the bench | Skin temperature for the stress model. +Vs on **5V** (needs at least 4 V), output on GPIO 35 |
+| AD8232 ECG module | wired; sampling and lead-off checked, no on-body trace yet | Stress, from heart rate and HRV. Electrodes on both wrists (§5) |
 | Add-on board: gesture and ultrasonic sensors | not used | The ultrasonic's echo is 5V: it needs a divider before any ESP32 pin |
 
 **Where to wear it:** the add-on board on the **back of the hand** you scratch with, flat and
@@ -92,11 +96,14 @@ snug, the same way round every time. Scratch vibration is strongest there and fa
 | 4 | TFT RESET | |
 | 21, 22 | I2C SDA, SCL: ADXL345 | the ESP32's default I2C pins |
 | 27 | touch pad OUT1 | |
-| 35 | **planned:** LM35 skin temperature | ADC1, input only |
-| 36 (VP) | **planned:** ECG OUTPUT | ADC1, input only |
-| 39 (VN), 34 | **planned:** ECG LO+, LO− (lead-off detect) | input only, digital |
-| 33 | **planned:** ECG SDN (sleeps the module when not recording) | output |
-| 32 | spare ADC1 (a second LM35 if the lesion-vs-healthy pair comes back) | ADC1 |
+| 35 | LM35 skin temperature | ADC1, input only |
+| 32 | AD8232 OUTPUT (ECG) | ADC1 |
+| 33 | AD8232 LO+ (high when an electrode is off) | digital input |
+| 34 | AD8232 LO− (same) | digital input, input only |
+| 36, 39 | not broken out on our ESP32 board | |
+
+The AD8232's SDN pin goes to 3V3 (always on). Moving it to a GPIO later would let the band sleep
+the module between checks.
 | 26, 25, 13 | spare: touch OUT2-4 if wanted | |
 
 Rules behind it: analog sensors go on **ADC1** pins (32-39), because ADC2 stops working while
@@ -111,12 +118,14 @@ Replaces GSR (31 Oct). The stress model is retrained on WESAD's chest ECG (700 H
 same 15 subjects): heart rate and HRV features with wrist temperature and motion, calibrated on
 the wearer's first calm minutes as before. Compare it against the GSR model on the same
 leave-one-subject-out split, so we know what dropping GSR costs.
-- **Module:** AD8232 assumed (to confirm). OUTPUT to GPIO 36, LO+ / LO− to 39 / 34, SDN to 33,
-  powered from 3V3.
-- **Electrodes, still to decide:** ECG needs electrodes on opposite sides of the heart, so the
-  band alone can't record it. Either sticky pads or a chest strap wired to the band (continuous,
-  and where WESAD's ECG was recorded), or a 1-2 minute check with a finger of the other hand on a
-  pad on top of the band (on demand, not continuous).
+- **Module:** AD8232, powered from **3V3 only** (its maximum is 3.6 V). OUTPUT to GPIO 32,
+  LO+ / LO− to 33 / 34, SDN to 3V3.
+- **Electrodes (decided 31 Oct): both wrists, Lead I.** RA on the inside of the right wrist, LA on
+  the inside of the left wrist under the band, RL on the back of a hand. Gel pads, fresh each
+  session. A reading is a seated, still, 1-2 minute check: 30-120 s of RMSSD agrees well with a
+  5-minute recording (Munoz et al. 2015, 3,387 adults).
+- **Safety:** with electrodes on, the band runs from a power bank or a laptop on battery, never a
+  laptop plugged into the wall; the AD8232 board has no mains isolation.
 - **On the band:** R-peak detection and HR/HRV per window, sent over BLE; the raw trace stays on
   the band (about 250 Hz would swamp the link). Lead-off pins blank the reading when an
   electrode slips.
@@ -208,8 +217,9 @@ activities.
 ## 8. Roadmap
 
 1. Train and test the scratch model on recordings (in progress), then the volunteer day.
-2. ECG (GPIO 36) and the LM35 (GPIO 35), with the stress model retrained on WESAD's chest ECG.
-   Decide the electrode placement first.
+2. ECG (GPIO 32) and the LM35 (GPIO 35) in the band firmware, replacing its GSR and thermistor
+   code (`skin_adc.c`), with the stress model retrained on WESAD's chest ECG. Then record an
+   on-body ECG and check its heart rate against a reference (a chest strap or a pulse count).
 3. The hub's own dashboard page: the same Home tab, band connection and camera fix as the website.
 4. Off the breadboard: perfboard, then a PCB.
 
@@ -218,7 +228,4 @@ activities.
 Not part of the finale build; kept so the work isn't lost.
 - **ESP32-CAM on-device screen** (`firmware_dermedge/esp32cam_screen/`): a 300 KB INT8 model
   that screens photos on the camera itself. It builds, but hasn't run on a board.
-- **Lesion-vs-healthy temperature pair:** two LM35s (the second on GPIO 32), one on the lesion and one on healthy
-  skin, with the difference as a flare signal. Revisit only with dermatologist support and
-  data showing it tracks flares.
 - **A second band** for the other hand, so scratching with either hand is seen.

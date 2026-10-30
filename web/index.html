@@ -179,6 +179,8 @@
   .tx-list li.open { cursor: pointer; } .tx-list li.open:hover { background: var(--accent-soft); }
   .modal.wide { width: min(880px, 100%); }
   .sensor-note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .install-ios { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--accent-soft); font-size: 14px; }
+  .install-ios svg { width: 17px; height: 17px; vertical-align: -3px; color: var(--accent); }
   .insight { padding: 12px 14px; border-radius: 16px; background: var(--neutral-bg); margin-top: 10px; font-size: 14px; }
   .insight b { color: var(--deep); }
 
@@ -293,6 +295,13 @@
       <div class="controls" id="installRow" hidden>
         <button class="btn primary" id="installBtn">Install DermEdge</button>
         <span class="muted">Adds it to your home screen and works offline once the skin model has loaded.</span>
+      </div>
+      <div class="install-ios" id="installIos" hidden>
+        <b>Install on iPhone:</b> tap
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M7 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1"/>
+        </svg>
+        <b>Share</b>, then <b>Add to Home Screen</b>. DermEdge then opens like an app and works offline once the skin model has loaded.
       </div>
     </div>
     <div class="grid" style="margin-top:20px">
@@ -614,6 +623,8 @@
 
 <script>
 const $ = id => document.getElementById(id);
+// iPadOS reports itself as a Mac, so a touch screen gives it away
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 let rashStreak = 0, lastAnalyse = 0, busy = false, chart;
 
@@ -1005,10 +1016,8 @@ function renderBand(b) {
     '<div class="controls"><button class="btn" id="bandDismiss">Dismiss alert</button></div>' : "";
   if (b.alert) $("bandDismiss").onclick = () => DermBand.dismissAlert();
   $("bandError").hidden = !b.error; $("bandError").textContent = b.error || "";
-  // iPhone and iPad browsers (Safari, and Chrome on iOS) have no Web Bluetooth; Bluefy adds it.
-  // iPadOS reports itself as a Mac, so a touch screen gives it away.
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (!b.supported) $("bandSupport").textContent = ios
+  // iPhone and iPad browsers (Safari, and Chrome on iOS) have no Web Bluetooth; Bluefy adds it
+  if (!b.supported) $("bandSupport").textContent = IOS
     ? "iPhone browsers can't use Bluetooth. To connect your band, install the free Bluefy browser from the App Store and open this page in it. The skin check works here as it is."
     : "This browser can't use Bluetooth. Open DermEdge in Chrome or Edge on a computer or Android phone.";
   if (b.sessionsChanged !== bandSessionsSeen) { bandSessionsSeen = b.sessionsChanged; loadBandSessions(); }
@@ -1216,7 +1225,12 @@ function applyPreferredSite() {
   if (prefs.sites && prefs.sites.length && !$("site").value) $("site").value = prefs.sites[0];
 }
 
-// installable app: Chrome and Edge offer an install prompt; sw.js caches the app for offline use
+// installable app: Chrome and Edge offer an install prompt; sw.js caches the app for offline use.
+// iOS never fires beforeinstallprompt, so iPhone users get the Share -> Add to Home Screen steps
+// instead, unless it's already installed or they're in Bluefy (a Web Bluetooth browser with no
+// Add to Home Screen; it's the only iOS browser with navigator.bluetooth).
+const installed = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+$("installIos").hidden = !(IOS && !installed && !navigator.bluetooth);
 let installEvt = null;
 addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("installRow").hidden = false; });
 addEventListener("appinstalled", () => { installEvt = null; $("installRow").hidden = true; });

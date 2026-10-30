@@ -462,7 +462,8 @@ img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-s
   }
 
   // ---------- model loading banner ----------
-  function banner(msg, frac) {
+  let bannerTimer;
+  function banner(msg, frac, hideAfter = 2500) {
     let b = document.getElementById('modelBanner');
     if (!b) {
       b = document.createElement('div'); b.id = 'modelBanner';
@@ -472,7 +473,8 @@ img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-s
       document.body.appendChild(b);
     }
     b.textContent = msg; b.hidden = false;
-    if (frac >= 1) setTimeout(() => { b.hidden = true; }, 2500);
+    clearTimeout(bannerTimer);
+    if (frac >= 1) bannerTimer = setTimeout(() => { b.hidden = true; }, hideAfter);
   }
 
   // ---------- the router ----------
@@ -538,7 +540,7 @@ img{height:90px;border-radius:10px;margin-right:6px}.note{margin-top:24px;font-s
   window.fetch = (input, opts) => {
     const url = typeof input === 'string' ? input : input.url;
     if (new URL(url, location.origin).pathname.startsWith('/api/')) return route(url, opts).catch(e => {
-      console.error(e); banner('Something went wrong: ' + e.message, 1); return json({ error: String(e) }, 500);
+      console.error(e); banner('Something went wrong: ' + e.message, 1, 12000); return json({ error: String(e) }, 500);
     });
     return realFetch(input, opts);
   };

@@ -23,8 +23,16 @@ let clip, stage2, stage2Ready, text, heads, fc, ready, backend = '';
 
 function report(onProgress, msg, frac) { if (onProgress) onProgress(msg, frac); }
 
+// Phones get WebAssembly, not WebGPU: mobile GPUs can build the session and then fail or stall on
+// the first run, and phone browsers have far less memory to fall back with.
+const MOBILE = (navigator.userAgentData && navigator.userAgentData.mobile) || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+// Smaller ONNX Runtime memory footprint on WebAssembly (no pre-reserved arena or memory patterns).
+const WASM_OPTS = { executionProviders: ['wasm'], enableCpuMemArena: false, enableMemPattern: false };
+
 // Fetches a model file through the Cache API, so later visits read it from disk instead of the
 // network (the HTTP cache may evict files this large). onBytes(n) reports bytes as they arrive.
+// With a plain Content-Length the bytes go straight into one buffer, so a phone holds one copy
+// of the file while it downloads instead of two.
 async function fetchModel(url, onBytes) {
   let cache = null;
   try { cache = await caches.open(CACHE); } catch (e) { cache = null; }
@@ -32,16 +40,22 @@ async function fetchModel(url, onBytes) {
   if (hit) { const b = await hit.arrayBuffer(); onBytes(b.byteLength); return new Uint8Array(b); }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const len = res.headers.get('Content-Encoding') ? 0 : +res.headers.get('Content-Length') || 0;
   const reader = res.body.getReader(), chunks = [];
-  let n = 0;
+  let out = len ? new Uint8Array(len) : null, n = 0, w = 0;  // w: bytes written into out
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value); n += value.length; onBytes(value.length);
+    if (out && !chunks.length && w + value.length <= len) { out.set(value, w); w += value.length; } else chunks.push(value);
+    n += value.length; onBytes(value.length);
   }
-  const out = new Uint8Array(n);
-  let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
-  if (cache) cache.put(url, new Response(out)).catch(() => {});
+  if (!out || n !== len) {  // no usable length (or it was wrong): join the pieces instead
+    const all = new Uint8Array(n);
+    if (out) all.set(out.subarray(0, w));
+    let o = w; for (const c of chunks) { all.set(c, o); o += c.length; }
+    out = all;
+  }
+  if (cache) await cache.put(url, new Response(out)).catch(() => {});
   return out;
 }
 
@@ -64,28 +78,44 @@ async function loadClip(onProgress) {
   let o = 0; for (const p of parts) { bytes.set(p, o); o += p.length; }
   report(onProgress, 'Starting the skin model…', 0.99);
   let gpu = false;
-  try { gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) { gpu = false; }
+  if (!MOBILE) try { gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) { gpu = false; }
   if (gpu) {
-    try { clip = await window.ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; return; }
-    catch (e) { console.warn('WebGPU CLIP failed, falling back to WebAssembly', e); }
+    // A test run on a blank image, so a GPU that builds the session but can't run it still falls
+    // back to WebAssembly here rather than failing the first check.
+    try {
+      clip = await window.ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] });
+      await clip.run({ pixel_values: new window.ort.Tensor('float32', new Float32Array(3 * 224 * 224), [1, 3, 224, 224]) });
+      backend = 'WebGPU'; return;
+    } catch (e) {
+      console.warn('WebGPU CLIP failed, falling back to WebAssembly', e);
+      if (clip) clip.release().catch(() => {});
+      clip = null;
+    }
   }
-  clip = await window.ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] });
+  clip = await window.ort.InferenceSession.create(bytes, WASM_OPTS);
   backend = `WebAssembly, ${window.crossOriginIsolated ? window.ort.env.wasm.numThreads || 'multi' : 1} thread(s)`;
 }
 
 // Stage 2 is only needed once a photo screens positive, so it downloads in the background
-// while CLIP loads instead of in front of it. Its session is created only after CLIP's: two
-// sessions starting at once both try to initialise ONNX Runtime's WebAssembly ("multiple calls
-// to 'initWasm()'"), which knocks CLIP off WebGPU.
+// instead of in front of CLIP. Its session is created only after CLIP's: two sessions starting at
+// once both try to initialise ONNX Runtime's WebAssembly ("multiple calls to 'initWasm()'"),
+// which knocks CLIP off WebGPU. On phones it also waits to download until CLIP is running, so
+// the two files are never in memory at once.
 let clipReady;
 function loadStage2() {
-  if (!stage2Ready) stage2Ready = Promise.all([fetchModel(`/models/stage2.onnx?v=${MODELS_V}`, () => {}), clipReady])
-    .then(([b]) => window.ort.InferenceSession.create(b, { executionProviders: ['wasm'] }))
+  if (!stage2Ready) stage2Ready = (MOBILE ? clipReady.then(() => fetchModel(`/models/stage2.onnx?v=${MODELS_V}`, () => {}))
+                                          : Promise.all([fetchModel(`/models/stage2.onnx?v=${MODELS_V}`, () => {}), clipReady]).then(([b]) => b))
+    .then(b => window.ort.InferenceSession.create(b, WASM_OPTS))
     .then(s => { stage2 = s; }, e => { stage2Ready = null; throw e; });
   return stage2Ready;
 }
 
+// A failed load (a dropped connection, the phone running short of memory) is forgotten, so a
+// later check tries again instead of failing until the app is restarted; the live camera's
+// checks within 20 s of a failure get the same error rather than restarting the download.
+let failed = null;
 export function init(onProgress) {
+  if (!ready && failed && Date.now() - failed.at < 20000) return Promise.reject(failed.error);
   if (!ready) ready = (async () => {
     report(onProgress, 'Loading DermEdge models…', 0);
     window.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
@@ -95,7 +125,11 @@ export function init(onProgress) {
     [text, heads, fc] = await Promise.all(['clip_text', 'heads', 'stage2_fc'].map(n => fetch(`/models/${n}.json?v=${MODELS_V}`).then(r => r.json())));
     await clipReady;
     report(onProgress, `Models ready (${backend})`, 1);
-  })();
+  })().catch(e => {
+    ready = null; stage2Ready = null; clip = null;
+    failed = { at: Date.now(), error: new Error(`the skin model didn't load (${e.message || e}). Try again, or reopen the app.`) };
+    throw failed.error;
+  });
   return ready;
 }
 

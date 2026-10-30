@@ -6,6 +6,15 @@ is derm-edge.vercel.app (the v2 skin model is live).
 
 Tick items off in this file as you go (edit, commit, push), so everyone sees the state.
 
+**The story for the sensors (decided):** we don't train or show a model on our own sensors. The
+band **collects data for the doctor** (scratching, heart rate and HRV from the ECG, skin
+temperature), and models come later once that data pools. The one sensor-to-eczema result we
+quote is **Southampton**: a threshold classifier built on their data (eczema patch drier than the
+same patient's healthy skin) flags eczema skin in **13 of 13 patients**. Call it a "threshold
+classifier", not a trained or neural model: 13 patients is too few to train one, and a simple
+rule already separates all 13. The scratch detector on the band is the only model we trained
+on our own recordings (22 of 26 scratch clips, 7 people).
+
 ## Order of work (do them in this order)
 
 | # | When | Who | What |
@@ -56,7 +65,8 @@ flow) and keep the numbers as slide text.
 - Old numbers are gone: no "81.1%", no "AUC 0.93", no "67% → 83% calibration", no "ResNet18 / Grad-CAM".
 - Say "built and tested for South Asian skin", never "best for South Asian skin" (no published comparison exists).
 - Keep the small footnote on the market slide: Google's numbers are a different task.
-- No stress accuracy for the ECG (its model isn't trained); say "heart rate and HRV".
+- No stress model and no stress accuracy: the ECG gives "heart rate and HRV, recorded for the doctor".
+- Southampton: "threshold classifier, 13 of 13 patients", never "we trained a model".
 - Severity: say "within one band 97.6% of the time", not "dermatologist-labelled" (still checking who labelled it).
 
 **Check with the team:** the footer says "Finale · MGUMST Jaipur". Confirm the round's exact name
@@ -99,9 +109,8 @@ music over speech. Export MP4 1080p; also keep A and B as separate files in case
 - [ ] A flare alert reaches the band's screen; double tap dismisses it
 - [ ] Spare: USB cable, a power bank that powers the band, spare electrodes, tape
 
-**Decide by 3 am:** the ECG stress model. If it isn't trained and tested by then, present ECG as
-"heart rate and HRV recorded for the doctor, a stress model once we have data", which matches the
-pitch (we collect data first, models come later). Tell Shreeya which way it goes.
+**No model to train.** The ECG and LM35 only need to read reliably and show up on the website:
+the pitch says the band collects data for the doctor, and models come later.
 
 **Video part B (band), per PITCH_DECK.md slide 4:** power on and pairing code → start a
 recording from the touch pad → scratching → the website's count goes up → ECG and temperature
@@ -131,10 +140,10 @@ judges" section of PITCH_DECK.md together once.
 **Tishya: the hardware and sensors**
 - ESP32, BLE with a 6-digit passkey (encrypted), offline buffering, the band's screen and touch pad
 - ADXL345 scratch detection: 800 Hz, the rhythm and frequency features, the 7-person leave-one-person-out result and its limits (acted scratching, not eczema at night)
-- AD8232 ECG: Lead I across both wrists, R-peaks → heart rate; HRV (RMSSD) and why it falls under stress; lead-off detection
-- LM35: 10 mV/°C, calibration, why skin temperature is a stress input and not an eczema signal
-- The Southampton study: 13 patients, moisture sensor lower on eczema skin in 13/13, Corneometer 13/13, TEWL higher 7/7; why moisture is future scope on our band
-- WESAD (15 people, stress protocol) and why no dataset links wearables to eczema flares
+- AD8232 ECG: Lead I across both wrists, R-peaks → heart rate; HRV (RMSSD) and what a doctor reads from it (stress and sleep load); lead-off detection
+- LM35: 10 mV/°C, calibration, why it's recorded as context and not used as an eczema signal
+- The Southampton study: 13 patients, moisture sensor lower on eczema skin in 13/13, Corneometer 13/13, TEWL higher 7/7; our threshold classifier on it (13/13) and why it's a rule, not a trained model; why moisture is future scope on our band
+- Why no public dataset links wearables to eczema flares, and so why the band collects data first (the collect → doctor validates → model automates loop)
 
 **Shreeya: the problem, the clinic, the market**
 - Eczema burden (GBD 2017, 204 million, 8.5% of Central Indian school children), look-alikes (psoriasis, tinea, scabies) and why telling them apart matters for treatment

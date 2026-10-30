@@ -61,14 +61,13 @@ def full_system():
     box(ax, 50, 575, 360, 82, "input", "ADXL345 accelerometer", "800 Hz, back of the hand")
     box(ax, 450, 575, 300, 82, "trained", "Scratch detector", "on the band, our recordings")
     box(ax, 50, 667, 360, 82, "input", "AD8232 ECG + LM35", "seated 1-2 min check; wrist temp")
-    box(ax, 450, 667, 300, 82, "trained", "Stress model", "heart rate + HRV vs your calm")
+    box(ax, 450, 667, 300, 82, "rule", "Heart rate, HRV, temp", "recorded for the doctor")
     box(ax, 50, 759, 360, 82, "future", "Moisture patch (future)", "eczema vs own healthy skin")
     box(ax, 50, 851, 360, 82, "input", "Journal", "sleep, new product, stress")
     arrow(ax, (410, 616), (450, 616))
     arrow(ax, (410, 708), (450, 708))
     box(ax, 830, 660, 290, 160, "rule", "Trigger index", "noisy-OR of all triggers", "1 − Π(1 − tᵢ)")
     arrow(ax, (750, 616), (790, 616), (790, 690), (830, 690))
-    arrow(ax, (750, 708), (830, 708))
     arrow(ax, (410, 800), (830, 800), dashed=True)
     arrow(ax, (410, 892), (790, 892), (790, 790), (830, 790))
     box(ax, 1220, 685, 330, 110, "rule", "Flare risk", "= image score × trigger index")
@@ -241,7 +240,7 @@ def band_data_loop():
     box(ax, 50, 405, 330, 95, "input", "LM35", "wrist skin temperature")
     box(ax, 430, 185, 330, 95, "trained", "Scratch episodes", "detected on the band")
     box(ax, 430, 295, 330, 95, "rule", "Heart rate + HRV", "from R-peaks")
-    box(ax, 430, 405, 330, 95, "rule", "Temperature", "vs your calm baseline")
+    box(ax, 430, 405, 330, 95, "rule", "Temperature", "recorded for the doctor")
     for y in (232, 342, 452):
         arrow(ax, (380, y), (430, y))
     box(ax, 820, 280, 300, 125, "rule", "Bluetooth LE", "encrypted, passkey-paired", "buffers offline")
@@ -263,13 +262,13 @@ def band_data_loop():
          "· Moisture sensor read lower on eczema skin: 13 of 13",
          "· Corneometer hydration lower: 13 of 13 (by 12–55%)",
          "· Water loss (TEWL) higher: 7 of 7",
-         "A paired rule (patch vs own healthy skin) flags all 13.",
-         "Known biomarkers work; what's missing is everyday data.")
+         "Our threshold classifier on this data (patch vs own",
+         "healthy skin) flags all 13. What's missing is everyday data.")
     note(ax, 1030, 590, 920, 300, "What the band already does",
          "Scratch detection on the band: 22 of 26 scratch clips found",
          "across 7 people, each tested by a model that never saw them",
-         "ECG check: heart rate and HRV against your own calm",
-         "baseline; LM35 wrist temperature alongside",
+         "ECG check: heart rate and HRV, recorded for the doctor;",
+         "LM35 wrist temperature alongside",
          "Live readings in the app; flare alerts on the band's screen",
          "Every recording kept for the doctor, never uploaded",
          "")

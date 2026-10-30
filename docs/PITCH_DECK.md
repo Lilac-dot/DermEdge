@@ -64,7 +64,7 @@ no scratching or stress data, and the apps that exist upload photos to the cloud
 
 **DermEdge = a camera check + a wearable band + a doctor report, all on your own device.**
 - **Is there a rash? Is it eczema? How severe?** Three answers from one photo, in the browser
-- **The DermEdge band** records scratching, stress (ECG) and skin temperature, and shows alerts
+- **The DermEdge band** records scratching, heart rate and HRV (ECG) and skin temperature for the doctor, and shows alerts
 - **Tracks every body site over time**, with treatments, triggers and a printable doctor report
 - **Private:** no photo leaves the device; works offline once installed
 
@@ -130,8 +130,8 @@ reviews → data pools → models learn, with the Southampton evidence box).
 
 **ON THE BAND**
 - **ADXL345 accelerometer** on the back of the hand: scratch detection running on the ESP32
-- **AD8232 ECG**, a 1-2 minute seated check with electrodes on both wrists: heart rate and HRV for stress
-- **LM35 skin temperature**: a stress input
+- **AD8232 ECG**, a 1-2 minute seated check with electrodes on both wrists: heart rate and HRV, recorded for the doctor
+- **LM35 skin temperature**: recorded alongside
 - Touch pad, 1.8" screen for alerts, encrypted Bluetooth, about 20 hours of offline storage
 
 **KNOWN BIOMARKERS CAN FLAG ECZEMA: THE SOUTHAMPTON STUDY**
@@ -140,22 +140,23 @@ We analysed the Southampton e-textile study (13 patients with eczema, University
 - The wearable moisture sensor read lower on eczema skin in **13 of 13 patients**
 - The clinical standard (Corneometer) agreed in **13 of 13**; water loss (TEWL) was higher in **7 of 7**
 
-So a wearable reading of skin barrier biomarkers separates eczema skin from healthy skin. This is
-the basis for a moisture patch on a future band.
+From this data we built a threshold classifier (eczema patch drier than the same patient's healthy
+skin) that flags eczema skin in **13 of 13 patients**. So a wearable reading of skin barrier
+biomarkers can detect eczema, and this is the basis for a moisture patch on a future band.
 
 ## 10. From data to diagnosis
 
 **TODAY: THE BAND COLLECTS THE DATA**
 No public dataset pairs our sensors (scratching, ECG, skin temperature) with eczema outcomes. So
 the band records them, and the website charts each recording with a CSV download: a doctor reads
-scratching at night, stress and temperature next to the photo history.
+scratching at night, heart rate, HRV and temperature next to the photo history.
 
 **NEXT: DOCTORS LABEL, THE DATA POOLS**
 Every recording a doctor reviews becomes labelled data: this night, this flare, this severity.
 
 **THEN: A MODEL AUTOMATES IT**
-Once enough data pools up, a model learns the patterns, as we did for stress from WESAD and for
-scratching from our own recordings. The doctor then only confirms.
+Once enough data pools up, a model learns the patterns, as we did for scratching from our own
+recordings and for skin barrier readings from the Southampton study. The doctor then only confirms.
 
 Visual: the loop in `docs/architecture/v2_5_band_data_loop.png` (shared with slide 9), or three steps left to right:
 **Collect → Doctor validates → Model automates**.
@@ -233,8 +234,11 @@ Know these so no question catches us out:
   79 conditions on Google's data.
 - **Severity labels** cover four EASI signs on curated photos, not a dermatologist's full EASI. Ask Tishya who labelled
   them (they sit in a `dead_ends/eczema_severity_proxy_attempt` folder) before calling them dermatologist-labelled.
-- **Stress:** the ECG model is being retrained on WESAD's chest ECG (Tishya); the old GSR model was
-  90% accurate, 73% of stress caught, leave-one-person-out.
+- **Stress:** we don't claim a stress model. The ECG gives heart rate and HRV, recorded for the doctor;
+  a model comes once labelled data pools. (Earlier we built one on WESAD's skin conductance: 90%
+  accurate, leave-one-person-out. The band switched to ECG, so it isn't on the band.)
+- **Southampton** is a threshold classifier (patch vs the same patient's healthy skin), not a trained
+  neural network: 13 patients is too few to train one, and a simple rule already separates all 13.
 - **Flare risk** is a stated rule (image score × noisy-OR of triggers), not a trained model.
 
 Sources: [MedSigLIP model card](https://huggingface.co/google/medsiglip-448) ·

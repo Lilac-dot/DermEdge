@@ -118,8 +118,14 @@ arriving live → an alert on the band, double tap. Film the band and the laptop
 in one shot if possible. 1.5-2.5 min.
 
 **Two answers for the team:**
-- [ ] Who labelled the severity data (`dead_ends/eczema_severity_proxy_attempt`)? Dermatologist, us, or a proxy? Write it here.
-- [ ] Confirm the scratch numbers on the slides: 22 of 26 scratch clips across 7 people, leave-one-person-out.
+- [x] Who labelled the severity data (`dead_ends/eczema_severity_proxy_attempt`)? **Claude (an AI), as a
+  proxy**: four EASI signs (redness, papules, scratch marks, thickening), 0-3 each, on our curated
+  eczema photos. Not a dermatologist and not patient-reported. "Within one band 97.6%" is agreement
+  with those proxy labels, so say "AI-assisted proxy labels; dermatologist validation is next",
+  never "dermatologist-labelled" or "clinically validated". The Mendeley "Multi-Class Skin Disease
+  Image Dataset with Severity Levels" was dropped (non-eczema diagnoses mixed in, broken test split,
+  no documented labelling) and isn't used. (Tishya)
+- [x] Confirm the scratch numbers on the slides: 22 of 26 scratch clips across 7 people, leave-one-person-out. **Confirmed**, with 14 false alarms in 73 other clips. (Tishya)
 
 ---
 

@@ -24,8 +24,7 @@ stages and the skin-type check. Switch only if it ties or wins.
 The phone model is **dropped for the finale**: the full model now loads on phones (WebAssembly),
 so `scripts/train_phone_student.py` stays as future scope. Don't run the Colab steps.
 Rebuild the Canva deck from [PITCH_DECK.md](PITCH_DECK.md) (rewritten 31 Oct: 10-minute timing,
-demo video plan, new diagrams in `docs/architecture/`: `7_old_vs_new.png`,
-`1_stage1_clip_rash_v2.png`, `2_stage2_clip_head_v2.png`, and the redrawn `0_full_system.png`).
+demo video plan, new diagrams: the `v2_*.png` files in `docs/architecture/`).
 
 ### Tishya: sensors, plus one upload
 The heads were trained on files that were never committed. Zip these from your DermEdge folder

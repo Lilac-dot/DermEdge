@@ -4,8 +4,8 @@
 
 Rewritten 31 Oct 2026 for the finale format: **10 minutes in total, including a 3-5 minute demo
 video.** That leaves about 5-6 minutes of talking, so the deck is 12 slides plus the video, about
-30 seconds per slide. Diagrams are in `docs/architecture/` (3200 × 1800 PNG);
-`python scripts/draw_architecture.py` redraws them.
+30 seconds per slide. Diagrams are in `docs/architecture/` (3200 × 1800 PNG); the `v2_*` ones are this deck's,
+redrawn by `python scripts/draw_pitch_v2.py`.
 
 **What changed since the 26 Oct draft**
 - **The skin model was rebuilt** (slides 6-8). Stage 2 is no longer a separate ResNet18: it's a
@@ -90,14 +90,14 @@ moment for slide 10.
 
 ## 5. System architecture
 
-Diagram: `docs/architecture/0_full_system.png` (redrawn 31 Oct)
+Diagram: `docs/architecture/v2_0_full_system.png`
 
 Caption: Two paths, one device. The camera path answers rash, eczema and severity; the band path
 records scratching and stress; both meet in a daily flare risk and the doctor report.
 
 ## 6. How the skin model evolved
 
-Diagram: `docs/architecture/7_old_vs_new.png` (new)
+Diagram: `docs/architecture/v2_1_old_vs_new.png`
 
 Talking point: *"Our first model scored 81% on textbook photos. When we tested it on real hospital
 photos from South Asia, it struggled. So we rebuilt it: one shared CLIP pass with three trained
@@ -106,8 +106,8 @@ heads, retrained with South Asian hospital photos. It now catches 84% of those r
 
 ## 7. Stages 1 and 2: rash, then eczema vs look-alikes
 
-Diagrams: `docs/architecture/1_stage1_clip_rash_v2.png` and
-`docs/architecture/2_stage2_clip_head_v2.png` (both new). Use one per half of the slide, or two
+Diagrams: `docs/architecture/v2_2_stage1_rash.png` and
+`docs/architecture/v2_3_stage2_eczema.png` (the occlusion heatmap is in stage 2). Use one per half of the slide, or two
 slides if time allows.
 
 Captions:
@@ -125,7 +125,8 @@ band 97.6% of the time; mean error 1.2 points.
 
 ## 9. The hardware: the DermEdge band
 
-Photo of the band on the breadboard, plus `docs/architecture/6_band_scratch.png`.
+Photo of the band on the breadboard, plus `docs/architecture/v2_5_band_data_loop.png` (sensors → Bluetooth → record → doctor
+reviews → data pools → models learn, with the Southampton evidence box).
 
 **ON THE BAND**
 - **ADXL345 accelerometer** on the back of the hand: scratch detection running on the ESP32
@@ -156,7 +157,8 @@ Every recording a doctor reviews becomes labelled data: this night, this flare, 
 Once enough data pools up, a model learns the patterns, as we did for stress from WESAD and for
 scratching from our own recordings. The doctor then only confirms.
 
-Visual: three steps, left to right: **Collect → Doctor validates → Model automates**.
+Visual: the loop in `docs/architecture/v2_5_band_data_loop.png` (shared with slide 9), or three steps left to right:
+**Collect → Doctor validates → Model automates**.
 
 ## 11. Results
 
@@ -172,6 +174,8 @@ Visual: three steps, left to right: **Collect → Doctor validates → Model aut
 
 ## 12. DermEdge vs the market
 
+Chart: `docs/architecture/v2_6_results_vs_market.png` (AUC bars, with the different-task footnote).
+
 | | **DermEdge** | Google MedSigLIP | Google Derm Foundation | DermLIP (Derm1M) |
 |---|---|---|---|---|
 | Skin-condition AUC | **0.92** rash screen; **0.87** eczema on South Asian photos | 0.88 | 0.84 | 0.91 on South Asian photos, vs our 0.89 in the same test |
@@ -186,8 +190,8 @@ Talking point: *"The biggest models from Google score about the same as ours. Th
 building blocks; DermEdge is a finished screening tool that also scores severity, runs on a phone
 and tracks the condition between visits, with sensor data to make it more accurate over time."*
 
-Footnote on the slide (small): *Google figures: 79 skin conditions, Google's tele-dermatology
-data (MedSigLIP model card). DermLIP: our head-to-head on SkinDisNet with the same heads.
+Footnote on the slide (small): *Google figures: 79 skin conditions, US tele-dermatology data
+(MedGemma technical report, arXiv 2507.05201, Table 15): a different task. DermLIP: our head-to-head on SkinDisNet with the same heads.
 Different datasets, so a guide, not a contest.*
 
 ## 13. Impact and future scope
@@ -200,7 +204,8 @@ informed by data from the days in between.
 - **Sensor-trained flare model:** once doctors have labelled enough band recordings, scratching,
   stress and temperature feed a learned model instead of a fixed rule
 - **Moisture patch** on the band, using the Southampton biomarker finding
-- **A 17 MB phone model** that copies the full model, for low-end phones (training script ready)
+- **A 17 MB phone model** that copies the full model, for low-end phones (training script ready;
+  `docs/architecture/v2_4_device_tiers.png`)
 - **On-device camera:** a 300 KB model on an ESP32-CAM, already trained
 - **Clinic partnerships:** share reports with a doctor, with consent, under the DPDP Act
 - A PCB band instead of the breadboard
@@ -226,7 +231,8 @@ Know these so no question catches us out:
   data includes SCIN, so its SCIN scores are inflated.
 - **Market numbers** compare different datasets and tasks: MedSigLIP's 0.88 is an average over
   79 conditions on Google's data.
-- **Severity labels** cover four EASI signs on curated photos, not a dermatologist's full EASI.
+- **Severity labels** cover four EASI signs on curated photos, not a dermatologist's full EASI. Ask Tishya who labelled
+  them (they sit in a `dead_ends/eczema_severity_proxy_attempt` folder) before calling them dermatologist-labelled.
 - **Stress:** the ECG model is being retrained on WESAD's chest ECG (Tishya); the old GSR model was
   90% accurate, 73% of stress caught, leave-one-person-out.
 - **Flare risk** is a stated rule (image score × noisy-OR of triggers), not a trained model.

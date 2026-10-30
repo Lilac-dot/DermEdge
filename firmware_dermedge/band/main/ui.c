@@ -77,7 +77,7 @@ static void header(const ui_model_t *m) {
     disp_rect(0, 0, DISP_W, 18, C_DEEP);
     logo(&logo_sm_circle, &logo_sm_drop, &logo_sm_shine, 4, 2, C_SOFT);
     disp_ftext(&font_label, 22, 3, "DermEdge", C_WHITE);
-    if (m->skin_sim) {  // never let simulated skin readings pass for real ones
+    if (m->skin_sim) {  // never let simulated heart or temperature readings pass for real ones
         disp_round_rect(84, 3, 26, 13, 4, C_WHITE);
         disp_ftext(&font_label, 87, 3, "SIM", C_BAD);
     }
@@ -147,8 +147,7 @@ static void screen_home(const ui_model_t *m) {
     logo(&logo_md_circle, &logo_md_drop, &logo_md_shine, IN_X - 2, CARD_Y + 5, C_SOFT);
     disp_ftext(&font_title, IN_X + 34, CARD_Y + 8, "Ready", C_TEAL);
     status_line(CARD_Y + 40, m->sm->linked, m->sm->linked ? "Phone connected" : "Phone not connected");
-    status_line(CARD_Y + 54, m->gsr_state == SENSOR_OK,
-                m->gsr_state == SENSOR_OK ? "Skin sensor on" : m->gsr_state == SENSOR_IDLE ? "Skin sensor off skin" : "No skin sensor");
+    status_line(CARD_Y + 54, m->ecg_state == SENSOR_OK, m->ecg_state == SENSOR_OK ? "ECG electrodes on" : "ECG electrodes off");
     if (m->has_last && card_b == FULL_B) {
         char buf[40];
         snprintf(buf, sizeof(buf), "Last: %.0f min, %lu scratch%s", m->last_minutes, (unsigned long)m->last_scratches,
@@ -226,8 +225,8 @@ static void screen_sensors(const ui_model_t *m) {
     unsigned pct = m->outbox_cap ? (unsigned)(m->sm->outbox * 100 / m->outbox_cap) : 0;
     snprintf(mem, sizeof(mem), "%u%% used", pct);
     row(CARD_Y + 18, "Movement", "OK", C_OK);
-    row(CARD_Y + 31, "Skin sensor", m->gsr_state == SENSOR_OK ? "On skin" : m->gsr_state == SENSOR_IDLE ? "Not on skin" : "None",
-        m->gsr_state == SENSOR_OK ? C_OK : m->gsr_state == SENSOR_IDLE ? C_WARN : C_MUTED);
+    row(CARD_Y + 31, "ECG", m->ecg_state == SENSOR_OK ? (m->hr_bpm > 0 ? "Reading" : "Finding beat") : "Electrodes off",
+        m->ecg_state == SENSOR_OK ? C_OK : C_MUTED);
     row(CARD_Y + 44, "Skin temp", m->temp_state == SENSOR_OK ? "OK" : m->temp_state == SENSOR_IDLE ? "Settling" : "None",
         m->temp_state == SENSOR_OK ? C_OK : m->temp_state == SENSOR_IDLE ? C_WARN : C_MUTED);
     row(CARD_Y + 57, "Phone", m->sm->linked ? "Connected" : "Not connected", m->sm->linked ? C_OK : C_MUTED);
@@ -257,8 +256,7 @@ static void alert_card(const ui_model_t *m) {
 }
 
 static void warning_strip(ui_warning_t w, bool scratch_only) {
-    static const char *text[] = {"", "Memory nearly full", "Skin sensor not on skin", "Temp sensor not reading",
-                                 "Offline: saving on band"};
+    static const char *text[] = {"", "Memory nearly full", "Temp sensor not reading", "Offline: saving on band"};
     if (w == WARN_STORAGE && scratch_only) {  // main.c keeps only scratch episodes from 98%
         disp_round_rect(CARD_X, WARN_Y, CARD_W, 16, 6, C_BAD);
         ICON(CARD_X + 6, WARN_Y + 4, WARN, 1, C_WHITE, C_BAD);
@@ -276,8 +274,8 @@ void ui_render(const ui_model_t *m) {
     static bool flow_ready;
     if (!flow_ready) ui_flow_init(&flow), flow_ready = true;
     ui_inputs_t in = {.state = m->sm->state, .linked = m->sm->linked, .page = m->sm->page, .held_ms = m->held_ms,
-                      .outbox = m->sm->outbox, .outbox_cap = m->outbox_cap, .gsr = m->gsr_state,
-                      .temp = m->temp_state, .now_ms = m->now_ms};
+                      .outbox = m->sm->outbox, .outbox_cap = m->outbox_cap, .temp = m->temp_state,
+                      .now_ms = m->now_ms};
     ui_screen_t scr = ui_flow_screen(&flow, &in);
     ui_warning_t warn = ui_flow_warning(&flow, &in);
     if (m->preview_screen) scr = (ui_screen_t)(m->preview_screen - 1);

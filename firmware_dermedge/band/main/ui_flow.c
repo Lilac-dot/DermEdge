@@ -25,14 +25,13 @@ ui_screen_t ui_flow_screen(ui_flow_t *f, const ui_inputs_t *in) {
     if (in->state == ST_RECORDING && f->last_state != ST_RECORDING) {
         f->started_until = now + UI_STARTED_MS;
         f->saved_until = 0;
-        f->gsr_bad_since = f->temp_bad_since = 0;
+        f->temp_bad_since = 0;
     }
     if (f->last_state == ST_RECORDING && in->state != ST_RECORDING) {
         f->saved_until = now + UI_SAVED_MS;
         f->started_until = 0;
     }
     f->last_state = in->state;
-    track(in->gsr, &f->gsr_worked, &f->gsr_bad_since, now);
     track(in->temp, &f->temp_worked, &f->temp_bad_since, now);
 
     switch (in->state) {
@@ -60,7 +59,6 @@ ui_warning_t ui_flow_warning(const ui_flow_t *f, const ui_inputs_t *in) {
     if (in->state == ST_BOOT || in->state == ST_ERROR) return WARN_NONE;
     if (in->outbox_cap && in->outbox >= UI_STORAGE_WARN * in->outbox_cap) return WARN_STORAGE;
     if (in->state != ST_RECORDING) return WARN_NONE;
-    if (f->gsr_bad_since && now - f->gsr_bad_since >= UI_SENSOR_GRACE_MS) return WARN_GSR_OFF;
     if (f->temp_bad_since && now - f->temp_bad_since >= UI_SENSOR_GRACE_MS) return WARN_TEMP_OFF;
     if (!in->linked) return WARN_OFFLINE;
     return WARN_NONE;

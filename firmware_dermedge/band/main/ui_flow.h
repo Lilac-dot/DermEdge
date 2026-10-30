@@ -7,9 +7,10 @@
 //   a recording stops ...................... SAVED for 4 s (time, scratch episodes, synced?)
 //   a tap on HOME or RECORDING ............. SENSORS (plain-language status), tap again to go back
 //   otherwise .............................. the device state's screen
-// Warnings sit in a strip along the bottom, most urgent first: band memory nearly full, skin
-// sensor off the skin, temperature sensor not reading (both only once they had worked, for 10 s),
-// recording while not connected.
+// Warnings sit in a strip along the bottom, most urgent first: band memory nearly full,
+// temperature sensor not reading (only once it had worked, for 10 s), recording while not
+// connected. ECG electrodes coming off doesn't warn: the heart check is a few minutes sitting
+// still, and the electrodes are meant to come off afterwards.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,7 +28,7 @@ typedef enum {
     SCR_HOLD_START, SCR_HOLD_STOP, SCR_STARTED, SCR_SAVED, SCR_SENSORS,
 } ui_screen_t;
 
-typedef enum { WARN_NONE, WARN_STORAGE, WARN_GSR_OFF, WARN_TEMP_OFF, WARN_OFFLINE } ui_warning_t;
+typedef enum { WARN_NONE, WARN_STORAGE, WARN_TEMP_OFF, WARN_OFFLINE } ui_warning_t;
 
 typedef enum { SENSOR_ABSENT, SENSOR_IDLE, SENSOR_OK } ui_sensor_t;  // not connected / connected, not reading / ok
 
@@ -37,15 +38,15 @@ typedef struct {
     int page;                 // app_sm's tap toggle: 1 = the sensors page
     uint32_t held_ms;         // touch pad held, 0 if not
     uint32_t outbox, outbox_cap;
-    ui_sensor_t gsr, temp;
+    ui_sensor_t temp;
     uint32_t now_ms;
 } ui_inputs_t;
 
 typedef struct {
     sm_state_t last_state;
     uint32_t started_until, saved_until;
-    uint32_t gsr_bad_since, temp_bad_since;  // 0: reading fine (or never worked)
-    bool gsr_worked, temp_worked;
+    uint32_t temp_bad_since;  // 0: reading fine (or never worked)
+    bool temp_worked;
 } ui_flow_t;
 
 void ui_flow_init(ui_flow_t *f);

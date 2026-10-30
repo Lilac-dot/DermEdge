@@ -1,6 +1,7 @@
 # DermEdge band firmware (ESP-IDF)
 
-The wrist band: scratch detection from the ADXL345, a touch pad for start/stop, the 1.8" ST7735
+The wrist band: scratch detection from the ADXL345, a heart check from an AD8232 ECG, wrist
+temperature from an LM35, a touch pad for start/stop, the 1.8" ST7735
 screen in the website's teal theme, and a Bluetooth LE link to the DermEdge website,
 which relays readings to the laptop hub (`app/band.py`).
 
@@ -30,26 +31,39 @@ The panel wants RGB order (`MADCTL 0xA0`); with the BGR bit set, colours swap re
 | | SDA / SCL | 21 / 22 |
 | | CS / SDO | 3V3 / GND (I2C mode, address 0x53) |
 | 4-pad touch module | OUT1 (OUT2-4 unused for now) | 27 (high while touched) |
-| Grove GSR module | SIG / VCC / GND | 32 / 3V3 / GND |
-| NTC thermistor, 10 kΩ B3950 | divider: 3V3 → 10 kΩ → **GPIO 34** → thermistor → GND | 34 |
+| AD8232 ECG module | 3.3v / GND | **3V3** (not 5V: its maximum is 3.6 V) / GND |
+| | OUTPUT / LO+ / LO− / SDN | 32 / 33 / 34 / 3V3 |
+| | electrodes | RA inside of the right wrist, LA inside of the left wrist, RL back of a hand |
+| LM35 (flat face toward you, legs down) | left / middle / right | **5V** / 35 / GND |
 
-## Skin sensors (GSR and skin temperature)
+With the ECG electrodes on, power the band from a power bank or a laptop on battery, never a
+laptop plugged into the wall: the AD8232 board has no mains isolation. Every part, with its
+checks and the research behind it: `docs/SENSORS.md`.
 
-A skin task (`main/skin_adc.c`, maths in `main/skin.c`) reads GSR at 4 Hz and the thermistor
-once a second on ADC1, and the band sends them in the website's format: GSR four readings to a
-message, skin temperature as a 5 s average. Nothing is sent while a reading isn't real:
-electrodes off the skin, a sensor unplugged (an unplugged GSR pin floats, which the task catches
-by briefly pulling it up and down; a real module's output doesn't move), or the thermistor not yet
-steady for 3 s. The recording's detail page (tap) shows both, and the header says **SIM** while
-they're simulated.
+## Heart (ECG) and skin temperature
+A skin task (`main/skin_adc.c`, maths in `main/skin.c`) samples the AD8232 at 250 Hz from a
+hardware timer and reads the LM35 on every sample, averaged over each second, both on ADC1.
+
+- **Heart check:** sit still with your hands resting and the three electrodes on. The band finds
+  each heartbeat (distance from a slow baseline against a decaying envelope of recent peaks, so
+  electrode polarity doesn't matter and T waves aren't counted) and drops intervals that jump
+  more than 30% from the recent ones. Every **30 s of unbroken electrode contact** becomes one
+  reading, heart rate, RMSSD and SDNN, if the hand was still for 27 of those seconds (motion under
+  0.03 g, no scratching), at least 15 clean beats were found and under 20% were artifacts.
+  Electrodes coming off starts a new window. Readings go out only while recording.
+- **Skin temperature:** an LM35 under the band, 10 mV per °C, read with the ADC at 0 dB for the
+  finest steps. It counts once it has stayed in 10-50 °C and steady for 3 s, and goes out as a
+  5 s average.
+- Nothing is sent while a reading isn't real, so a gap means "no data", never zeros. The
+  Recording's Sensors page (tap) shows both; the header says **SIM** while they're simulated.
+- The stress model itself runs on the website (`web/models/stress_ecg.json`, still to come).
 
 Over USB serial (`./idf.sh -p /dev/cu.SLAB_USBtoUART monitor`, or any serial terminal at 115200):
 
 | Command | Does |
 |---|---|
-| `skin on` / `skin off` | print the pins' millivolts, the readings and a verdict once a second |
-| `gsr cal` | with the electrodes **off** the skin: store this module's no-skin reading (about 512) |
-| `sim on` / `sim stress` / `sim off` | simulated calm / stressed readings instead of the sensors |
+| `skin on` / `skin off` | once a second: the ECG and LM35 pins' millivolts, electrodes on/off, beats, heart rate, temperature |
+| `sim on` / `sim stress` / `sim off` | a simulated ECG (about 68 bpm calm, 92 stressed) and temperature instead of the sensors |
 | `start` / `stop` | start or stop a recording, like the touch pad (works without the website) |
 | `peek` / `peek 40` | the next readings exactly as they'll go out over Bluetooth (from position 40) |
 | `outbox clear` | drop every reading waiting to be sent (test recordings, say) |
@@ -57,7 +71,7 @@ Over USB serial (`./idf.sh -p /dev/cu.SLAB_USBtoUART monitor`, or any serial ter
 ## Offline storage
 
 Readings wait for the phone in flash (`main/store.c`, the 2.4 MB `outbox` partition in
-`partitions.csv`): about 159,000 readings, roughly 20 hours with GSR on, kept across restarts and
+`partitions.csv`): about 159,000 readings, roughly 35 hours of recording, kept across restarts and
 flat batteries. Items are written in two steps, so one half-written when the power goes is
 skipped, and marked sent only after they're out, so a restart sends anything unconfirmed again.
 When it fills, older data is kept and new data thins out: motion every 10 s from 90% full, only
@@ -75,18 +89,19 @@ confirmed and a stop shows what was saved:
 | Screen | When |
 |---|---|
 | Connect | not paired: how to connect, or the pairing code |
-| Home | ready: phone and skin sensor status, "Hold the pad to start" |
+| Home | ready: phone and ECG electrode status, "Hold the pad to start" |
 | Hold to start / Hold to stop | while the pad is held: a ring fills over 2 s; letting go cancels |
 | Started | 1.5 s after a recording starts |
 | Recording | timer, scratch episodes, "Scratching detected" while it's happening |
 | Saved | 4 s after stopping: length, scratches, and whether it's synced |
-| Sensors | tap on Home or Recording: movement, skin sensor, skin temp, phone, memory, in words |
+| Sensors | tap on Home or Recording: movement, ECG, skin temp, phone, memory, in words |
 | Syncing, Sensor problem | readings going out; the accelerometer missing |
 | Flare alert | over anything, until a double tap (or the website) dismisses it |
 
 Users see plain status, not raw numbers (those are on the serial line: `skin on`). Warnings sit
-in a strip along the bottom, most urgent first: band memory 80% full; skin sensor off the skin or
-temperature sensor not reading for 10 s during a recording, once it had worked; recording offline.
+in a strip along the bottom, most urgent first: band memory 80% full; temperature sensor not
+reading for 10 s during a recording, once it had worked; recording offline. ECG electrodes coming
+off doesn't warn: the heart check is a few minutes, and they're meant to come off afterwards.
 
 | Touch | Does |
 |---|---|
@@ -127,6 +142,6 @@ encrypted, passkey-paired link:
 
 | Characteristic | | |
 |---|---|---|
-| `...7511` status | read / notify, 1 Hz | `{"id","s","r","src","label","el","n","act","q","alert"}` |
+| `...7511` status | read / notify, 1 Hz | `{"id","s","r","src","label","el","n","act","q","alert","ecg","hr","tc","sim"}` |
 | `...7512` data | notify | one reading per message in the hub's `/readings` shape plus `"r"` (recording number), `t` in seconds since that recording started |
 | `...7513` command | write | `start[:label]`, `stop`, `dismiss`, `alert:<level>\|<reason>\|<tip>`, `token:<device token>`, `unpair` |

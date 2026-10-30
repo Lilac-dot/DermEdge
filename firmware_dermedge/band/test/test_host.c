@@ -131,38 +131,98 @@ static void test_scratch(void) {
     CHECK(r.events == 0, "jolt: %d events", r.events);
 }
 
-// --- skin conductance and temperature ---------------------------------------------------
+// --- heart (ECG) and skin temperature ------------------------------------------------------
+// Runs `secs` seconds of the simulator through the detector and 30 s windows, as main.c does
+// with the hand still; returns the windows' readings averaged, and how many there were
+static int run_ecg(skin_sim_t *sim, ecg_det_t *d, int secs, float noise_mv, hrv_t *avg, float *live_bpm) {
+    hrv_win_t w;
+    hrv_win_reset(&w);
+    memset(avg, 0, sizeof(*avg));
+    int windows = 0;
+    for (int s = 0; s < secs; s++) {
+        for (int i = 0; i < SKIN_ECG_HZ; i++) {
+            int rr;
+            bool valid;
+            if (ecg_det_feed(d, skin_sim_ecg(sim) + noise(noise_mv), true, &rr, &valid)) hrv_win_add_rr(&w, rr, valid);
+        }
+        hrv_win_add_second(&w, true);
+        if (hrv_win_full(&w)) {
+            hrv_t h;
+            if (hrv_win_result(&w, &h)) {
+                avg->hr += h.hr, avg->rmssd += h.rmssd, avg->sdnn += h.sdnn, avg->beats += h.beats;
+                windows++;
+            }
+            hrv_win_reset(&w);
+        }
+    }
+    if (windows) avg->hr /= windows, avg->rmssd /= windows, avg->sdnn /= windows, avg->beats /= windows;
+    *live_bpm = ecg_det_bpm(d);
+    return windows;
+}
+
 static void test_skin(void) {
-    puts("skin sensors");
-    float c = skin_ntc_c(1650, 3300, 10000, 10000, 3950);
-    CHECK(fabsf(c - 25.0f) < 0.01f, "NTC at half the supply is its rated 25 C, got %.2f", c);
-    c = skin_ntc_c(1236.13f, 3300, 10000, 10000, 3950);  // worked out from the beta equation
-    CHECK(fabsf(c - 37.0f) < 0.05f, "NTC at 37 C, got %.2f", c);
-    CHECK(!skin_temp_plausible(skin_ntc_c(3300, 3300, 10000, 10000, 3950)), "open thermistor (pin at 3V3) rejected");
-    CHECK(!skin_temp_plausible(skin_ntc_c(0, 3300, 10000, 10000, 3950)), "shorted thermistor (pin at 0 V) rejected");
-    CHECK(!skin_temp_plausible(skin_ntc_c(3100, 3300, 10000, 10000, 3950)), "a pin near 3V3 (no NTC) is out of range");
-    float us = skin_gsr_us(967.74f, 3300, 512);
-    CHECK(fabsf(us - 13.054f) < 0.01f, "Grove a=300 is 13.05 uS, got %.3f", us);
-    CHECK(skin_gsr_us(1651.6f, 3300, 512) == 0, "Grove at its no-skin reading means not on skin");
-    CHECK(!skin_gsr_plausible(0), "0 uS is not sent");
-    // the simulator: calm stays plausible, stress raises conductance
+    puts("heart and skin temperature");
+    CHECK(fabsf(skin_lm35_c(330) - 33.0f) < 0.001f, "LM35: 330 mV is 33 C");
+    CHECK(!skin_temp_plausible(skin_lm35_c(0)), "LM35 at 0 V (unplugged or shorted) rejected");
+    CHECK(!skin_temp_plausible(skin_lm35_c(950)), "LM35 at the top of the ADC's range rejected");
+
     skin_sim_t sim;
+    ecg_det_t d;
+    hrv_t calm, stressed;
+    float bpm;
     skin_sim_init(&sim, 7);
-    float calm = 0, stressed = 0, t;
-    int bad = 0;
-    for (int i = 0; i < 4 * 600; i++) {
-        skin_sim_step(&sim, &us, &t);
-        bad += !skin_gsr_plausible(us) || !skin_temp_plausible(t);
-        if (i >= 4 * 300) calm += us / (4 * 300);
-    }
+    ecg_det_init(&d);
+    int n = run_ecg(&sim, &d, 120, 0, &calm, &bpm);
+    CHECK(n == 4, "calm: every 30 s window gives a reading (%d of 4)", n);
+    CHECK(fabsf(calm.hr - 68.2f) < 3, "calm heart rate about 68 bpm, got %.1f (T waves not counted as beats)", calm.hr);
+    CHECK(fabsf(bpm - calm.hr) < 6, "live heart rate %.1f close to the window's %.1f", bpm, calm.hr);
     sim.stressed = true;
-    for (int i = 0; i < 4 * 600; i++) {
-        skin_sim_step(&sim, &us, &t);
-        bad += !skin_gsr_plausible(us) || !skin_temp_plausible(t);
-        if (i >= 4 * 300) stressed += us / (4 * 300);
-    }
-    CHECK(bad == 0, "%d simulated readings out of range", bad);
-    CHECK(stressed > calm * 1.5f, "simulated stress raises conductance: %.2f vs calm %.2f uS", stressed, calm);
+    run_ecg(&sim, &d, 30, 0, &stressed, &bpm);  // settle into the new rate
+    n = run_ecg(&sim, &d, 120, 0, &stressed, &bpm);
+    CHECK(n >= 3, "stressed: windows give readings (%d of 4)", n);
+    CHECK(fabsf(stressed.hr - 92.3f) < 3, "stressed heart rate about 92 bpm, got %.1f", stressed.hr);
+    CHECK(stressed.rmssd < calm.rmssd * 0.6f, "stress lowers RMSSD: %.1f vs calm %.1f ms", stressed.rmssd, calm.rmssd);
+    CHECK(stressed.sdnn < calm.sdnn, "and SDNN: %.1f vs %.1f ms", stressed.sdnn, calm.sdnn);
+
+    // noisy electrodes (forearm muscles, a loose pad) still find the beats
+    sim.stressed = false;
+    n = run_ecg(&sim, &d, 60, 0, &calm, &bpm);
+    hrv_t noisy;
+    n = run_ecg(&sim, &d, 60, 120, &noisy, &bpm);
+    CHECK(n >= 1 && fabsf(noisy.hr - 68.2f) < 4, "120 mV of noise: %d windows, %.1f bpm", n, noisy.hr);
+
+    // electrodes off resets everything; the first beat back has no interval
+    int rr;
+    bool valid;
+    CHECK(!ecg_det_feed(&d, 1500, false, &rr, &valid) && ecg_det_bpm(&d) == 0, "electrodes off: no beats, no heart rate");
+
+    // a window where the hand moved, or with too many artifacts, gives no reading
+    hrv_win_t w;
+    hrv_win_reset(&w);
+    for (int i = 0; i < 34; i++) hrv_win_add_rr(&w, 880 + (i % 2) * 40, true);
+    for (int s = 0; s < 30; s++) hrv_win_add_second(&w, s >= 5);  // moving for 5 s
+    hrv_t h;
+    CHECK(!hrv_win_result(&w, &h), "5 s of movement: no reading");
+    hrv_win_reset(&w);
+    for (int i = 0; i < 34; i++) hrv_win_add_rr(&w, 880, i % 4 != 0);  // every fourth beat bad
+    for (int s = 0; s < 30; s++) hrv_win_add_second(&w, true);
+    CHECK(!hrv_win_result(&w, &h), "25%% artifacts: no reading");
+    hrv_win_reset(&w);
+    int rrs[] = {800, 820, 790, 810, 800, 830, 790, 800, 810, 820, 800, 790, 810, 800, 820, 800};
+    for (int i = 0; i < 16; i++) hrv_win_add_rr(&w, rrs[i], true);
+    for (int s = 0; s < 30; s++) hrv_win_add_second(&w, true);
+    CHECK(hrv_win_result(&w, &h), "a clean window gives a reading");
+    // worked out by hand: mean 805.6 ms, successive differences give RMSSD 20.66 ms
+    CHECK(fabsf(h.hr - 74.48f) < 0.05f && fabsf(h.rmssd - 20.66f) < 0.05f, "HR %.2f RMSSD %.2f", h.hr, h.rmssd);
+
+    // the simulated temperature stays plausible and cools a little under stress
+    skin_sim_init(&sim, 3);
+    float c = 0;
+    for (int i = 0; i < 600; i++) c = skin_sim_temp(&sim);
+    sim.stressed = true;
+    float cs = 0;
+    for (int i = 0; i < 600; i++) cs = skin_sim_temp(&sim);
+    CHECK(skin_temp_plausible(c) && skin_temp_plausible(cs) && cs < c, "simulated temp %.2f calm, %.2f stressed", c, cs);
 }
 
 // --- touch gestures --------------------------------------------------------------------
@@ -247,7 +307,7 @@ static void test_ui_flow(void) {
     puts("screens and warnings");
     ui_flow_t f;
     ui_flow_init(&f);
-    ui_inputs_t in = {.state = ST_BOOT, .outbox_cap = 3600, .gsr = SENSOR_ABSENT, .temp = SENSOR_ABSENT};
+    ui_inputs_t in = {.state = ST_BOOT, .outbox_cap = 3600, .temp = SENSOR_ABSENT};
     CHECK(ui_flow_screen(&f, &in) == SCR_BOOT, "boot");
     in.state = ST_PAIRING, in.now_ms = 1000;
     CHECK(ui_flow_screen(&f, &in) == SCR_CONNECT, "pairing shows Connect");
@@ -261,7 +321,7 @@ static void test_ui_flow(void) {
     in.held_ms = 0;
     CHECK(ui_flow_screen(&f, &in) == SCR_HOME, "letting go early goes back to Home");
 
-    in.state = ST_RECORDING, in.now_ms = 5000, in.gsr = SENSOR_OK;
+    in.state = ST_RECORDING, in.now_ms = 5000, in.temp = SENSOR_OK;
     CHECK(ui_flow_screen(&f, &in) == SCR_STARTED, "a new recording shows Started");
     in.now_ms = 5000 + UI_STARTED_MS + 1;
     CHECK(ui_flow_screen(&f, &in) == SCR_RECORDING, "then Recording");
@@ -273,19 +333,24 @@ static void test_ui_flow(void) {
     CHECK(ui_flow_screen(&f, &in) == SCR_HOLD_STOP, "holding while recording shows Hold to stop");
     in.held_ms = 0;
 
-    // the skin sensor comes off: a warning only after 10 s
-    in.gsr = SENSOR_IDLE, in.now_ms = 20000;
+    // the temperature sensor stops reading: a warning only after 10 s
+    in.temp = SENSOR_ABSENT, in.now_ms = 20000;
     ui_flow_screen(&f, &in);
-    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "no warning in the first seconds off the skin");
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "no warning in the first seconds");
     in.now_ms = 20000 + UI_SENSOR_GRACE_MS;
     ui_flow_screen(&f, &in);
-    CHECK(ui_flow_warning(&f, &in) == WARN_GSR_OFF, "skin sensor warning after 10 s");
-    in.gsr = SENSOR_OK, in.now_ms += 100;
+    CHECK(ui_flow_warning(&f, &in) == WARN_TEMP_OFF, "temperature warning after 10 s");
+    in.temp = SENSOR_OK, in.now_ms += 100;
     ui_flow_screen(&f, &in);
-    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "back on the skin clears it");
-    in.temp = SENSOR_ABSENT;
-    ui_flow_screen(&f, &in);
-    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "a temperature sensor that never worked never warns");
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "reading again clears it");
+    ui_flow_t fresh;
+    ui_flow_init(&fresh);
+    ui_inputs_t never = in;
+    never.temp = SENSOR_ABSENT;
+    ui_flow_screen(&fresh, &never);
+    never.now_ms += UI_SENSOR_GRACE_MS * 2;
+    ui_flow_screen(&fresh, &never);
+    CHECK(ui_flow_warning(&fresh, &never) != WARN_TEMP_OFF, "a temperature sensor that never worked never warns");
     in.linked = false;
     CHECK(ui_flow_warning(&f, &in) == WARN_OFFLINE, "recording while not connected warns");
     in.outbox = 3000;
@@ -296,7 +361,7 @@ static void test_ui_flow(void) {
     CHECK(ui_flow_screen(&f, &in) == SCR_SAVED, "stopping shows Saved");
     in.now_ms = 60000 + UI_SAVED_MS + 1;
     CHECK(ui_flow_screen(&f, &in) == SCR_SYNCING, "then Syncing");
-    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "skin warnings are for recordings only");
+    CHECK(ui_flow_warning(&f, &in) == WARN_NONE, "sensor warnings are for recordings only");
     in.state = ST_ERROR;
     CHECK(ui_flow_screen(&f, &in) == SCR_SENSOR_ERROR, "no accelerometer: the error screen");
 }
@@ -388,13 +453,13 @@ static void test_store(void) {
     CHECK(bad == 0 && store_count(&st) == 0, "a half-written item after a power cut is skipped (%d wrong)", bad);
 
     // the rule for a filling outbox: older data kept, new data thinned
-    int kept_motion = 0, kept_gsr = 0;
+    int kept_motion = 0, kept_other = 0;
     for (int t = 0; t < 100; t++) kept_motion += store_should_keep(0.5f, false, true, t);
     CHECK(kept_motion == 100, "below 90%%: every motion summary (%d/100)", kept_motion);
     kept_motion = 0;
-    for (int t = 0; t < 100; t++) kept_motion += store_should_keep(0.92f, false, true, t), kept_gsr += store_should_keep(0.92f, false, false, t);
-    CHECK(kept_motion == 10 && kept_gsr == 100, "from 90%%: motion every 10 s (%d/100), GSR all (%d/100)", kept_motion, kept_gsr);
-    CHECK(!store_should_keep(0.99f, false, false, 0) && !store_should_keep(0.99f, false, true, 0), "from 98%%: no GSR or motion");
+    for (int t = 0; t < 100; t++) kept_motion += store_should_keep(0.92f, false, true, t), kept_other += store_should_keep(0.92f, false, false, t);
+    CHECK(kept_motion == 10 && kept_other == 100, "from 90%%: motion every 10 s (%d/100), heart and temperature all (%d/100)", kept_motion, kept_other);
+    CHECK(!store_should_keep(0.99f, false, false, 0) && !store_should_keep(0.99f, false, true, 0), "from 98%%: no heart, temperature or motion");
     CHECK(store_should_keep(0.99f, true, false, 3) && store_should_keep(1.0f, true, false, 3), "scratch episodes always");
 }
 

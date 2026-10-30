@@ -21,10 +21,10 @@ typedef struct {
     uint32_t last_scratches;
     bool has_last;
     char alert_level[12], alert_reason[64], alert_tip[120];
-    float gsr_us, skin_c;     // latest skin readings (status only, not drawn)
-    bool gsr_ok, temp_ok;     // on skin / plugged in
-    int skin_sim;             // 1 while the skin sensors are simulated
-    ui_sensor_t gsr_state, temp_state;
+    float hr_bpm, skin_c;     // live heart rate (0: none) and skin temperature (status only, not drawn)
+    bool ecg_on, temp_ok;     // ECG electrodes on / temperature reading
+    int skin_sim;             // 1 while the heart and temperature sensors are simulated
+    ui_sensor_t ecg_state, temp_state;
     uint32_t outbox_cap;
     int preview_screen;       // test/preview.c only: draw this screen + 1 (0 = follow ui_flow)
     int preview_warning;      // likewise, warning + 1

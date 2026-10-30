@@ -1,46 +1,86 @@
-// Skin conductance (GSR) and skin temperature: conversions from ADC millivolts, and a simulator
-// for testing without the sensors. Plain C, no ESP-IDF, so the host tests check the maths.
+// The heart and skin-temperature sensors: beat detection, HRV and conversions, and a simulator
+// for testing without them. Plain C, no ESP-IDF, so the host tests check the maths.
 //
-//   GSR   a Grove GSR module on GPIO 32. Its own formula, R = (1024 + 2a) * 10000 / (no_skin - a)
-//         ohms for a 10-bit reading a, where no_skin (about 512) is the reading with nothing
-//         touching the electrodes; calibrate it per module with "gsr cal". 4 Hz, the rate the
-//         website's stress model (web/models/stress_gsr.json) was trained at.
-//   temp  a 10 kOhm NTC thermistor (B 3950) on GPIO 34: 3V3 -> 10 kOhm -> GPIO 34 -> NTC -> GND.
-//         Beta equation 1/T = 1/T25 + ln(R / R25) / B. Shown, not scored: in the stress model's
-//         test it drifted with time on the wrist and made stress detection worse.
-// From archive/gsr_wristband_wifi/main/signals.c.
+//   ECG   an AD8232 with electrodes on both wrists (Lead I), sampled at 250 Hz. Each beat's R-peak
+//         gives an RR interval; RR intervals that jump too far from the recent ones (a missed or
+//         extra beat, a bumped lead) are counted but left out of the HRV. Every 30 s of electrode
+//         contact with the hand still becomes one reading: heart rate, RMSSD and SDNN, the
+//         beat-timing features the stress model uses. Short windows are valid: 30-120 s of RMSSD
+//         agrees well with 5 minutes (Munoz et al. 2015, 3,387 adults).
+//   temp  an LM35 on the wrist: 10 mV per degree C. One input to the stress model (distal skin
+//         cools slightly under stress), not an eczema marker.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SKIN_GSR_HZ 4
-#define SKIN_SUPPLY_MV 3300.0f
-#define SKIN_GSR_NO_SKIN 512.0f  // default no-skin reading, on the module's 10-bit scale
-#define SKIN_NTC_SERIES_R 10000.0f
-#define SKIN_NTC_R25 10000.0f
-#define SKIN_NTC_BETA 3950.0f
-#define SKIN_GSR_MIN_US 0.05f    // below this the electrodes aren't on skin
-#define SKIN_GSR_MAX_US 60.0f    // above this the electrodes are touching each other
-#define SKIN_TEMP_MIN_C 10.0f    // outside 10-50 C the thermistor is unplugged or shorted
+#define SKIN_ECG_HZ 250
+#define SKIN_TEMP_MIN_C 10.0f    // outside 10-50 C the LM35 is unplugged, floating or shorted
 #define SKIN_TEMP_MAX_C 50.0f
 
-// The Grove module's 10-bit reading from a voltage on a supply_mv rail (it's ratiometric)
-float skin_gsr_reading(float mv, float supply_mv);
-// Microsiemens, or 0 when the electrodes aren't on skin (reading at or above no_skin)
-float skin_gsr_us(float mv, float supply_mv, float no_skin);
-// Degrees C, or a value outside 10-50 when the thermistor is open or shorted
-float skin_ntc_c(float mv, float supply_mv, float r_series, float r25, float beta);
-bool skin_gsr_plausible(float us);
+#define ECG_REFRACTORY_MS 280    // no two beats closer than this (about 210 bpm)
+#define ECG_MIN_PEAK_MV 40.0f    // ignore wiggles smaller than this
+#define ECG_RR_MIN_MS 300        // 200 bpm
+#define ECG_RR_MAX_MS 2000       // 30 bpm
+#define ECG_RR_JUMP 0.3f         // an RR more than 30% from the recent median is an artifact
+
+#define HRV_WINDOW_S 30          // the website's stress windows
+#define HRV_MIN_BEATS 15         // fewer good intervals than this: no reading
+#define HRV_MAX_BAD 0.2f         // more artifacts than this fraction: no reading
+#define HRV_MIN_STILL_S 27       // seconds of the window the hand must be still
+#define HRV_MAX_RR 80            // intervals kept per window (160 bpm for 30 s)
+
+float skin_lm35_c(float mv);
 bool skin_temp_plausible(float c);
 
-// Simulated wearer for testing without sensors: calm skin conductance with the occasional
-// response, slowly drifting skin temperature. "stressed" raises conductance and responses.
+// --- R-peak detector -----------------------------------------------------------------------
+// Distance from a slow baseline against a slowly decaying envelope of recent peaks, so it works
+// with either electrode polarity and ignores T waves (well under 60% of the R wave).
 typedef struct {
-    float level, scr, temp;
+    float baseline, envelope;
+    bool above, primed;
+    uint32_t n, last_beat;   // samples seen; sample index of the last beat (0: none yet)
+    uint16_t recent[5];      // the last good RR intervals, for the artifact check
+    int n_recent;
+} ecg_det_t;
+
+void ecg_det_init(ecg_det_t *d);
+// One sample. Returns true on a beat; *rr_ms is the interval since the previous beat (0 for the
+// first beat after the electrodes went on) and *valid whether it counts towards HRV. Electrodes
+// off resets the detector.
+bool ecg_det_feed(ecg_det_t *d, float mv, bool leads_on, int *rr_ms, bool *valid);
+// Live heart rate from the recent good intervals, or 0
+float ecg_det_bpm(const ecg_det_t *d);
+
+// --- 30 s HRV windows -----------------------------------------------------------------------
+typedef struct {
+    uint16_t rr[HRV_MAX_RR];  // 0 marks an artifact, so differences skip across it
+    int n_rr, n_bad, secs, secs_still;
+} hrv_win_t;
+
+typedef struct {
+    float hr, rmssd, sdnn;   // bpm, ms, ms
+    int beats;               // good intervals used
+} hrv_t;
+
+void hrv_win_reset(hrv_win_t *w);
+void hrv_win_add_rr(hrv_win_t *w, int rr_ms, bool valid);
+void hrv_win_add_second(hrv_win_t *w, bool still);
+bool hrv_win_full(const hrv_win_t *w);
+// The window's reading; false when it isn't usable (too few beats, too many artifacts, moving)
+bool hrv_win_result(const hrv_win_t *w, hrv_t *out);
+
+// --- simulator ------------------------------------------------------------------------------
+// A synthetic Lead I ECG (QRS, T wave, baseline wander, noise) around the AD8232's mid-rail, and a
+// slowly drifting wrist temperature. Calm: about 68 bpm with breathing-driven variability;
+// "stressed": about 92 bpm with much less.
+typedef struct {
+    float since_ms, rr_ms, t_s, temp;
     uint32_t seed;
     bool stressed;
 } skin_sim_t;
 
 void skin_sim_init(skin_sim_t *s, uint32_t seed);
-// One 4 Hz step
-void skin_sim_step(skin_sim_t *s, float *us, float *c);
+// One ECG sample (millivolts at the AD8232's output), advancing 1/SKIN_ECG_HZ s
+float skin_sim_ecg(skin_sim_t *s);
+// The wrist temperature now; call once a second
+float skin_sim_temp(skin_sim_t *s);

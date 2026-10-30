@@ -39,7 +39,7 @@ static void shot(const char *dir, const char *name, sm_state_t state, ui_screen_
 
 int main(int argc, char **argv) {
     const char *dir = argc > 1 ? argv[1] : ".";
-    m = (ui_model_t){.sm = &sm, .outbox_cap = 3600, .gsr_state = SENSOR_OK, .temp_state = SENSOR_OK};
+    m = (ui_model_t){.sm = &sm, .outbox_cap = 3600, .ecg_state = SENSOR_OK, .hr_bpm = 71, .temp_state = SENSOR_OK};
 
     shot(dir, "01_boot", ST_BOOT, SCR_BOOT, WARN_NONE);
     shot(dir, "02_connect", ST_PAIRING, SCR_CONNECT, WARN_NONE);
@@ -57,15 +57,15 @@ int main(int argc, char **argv) {
     shot(dir, "07_recording", ST_RECORDING, SCR_RECORDING, WARN_NONE);
     m.scratchy = true;
     shot(dir, "08_recording_scratching", ST_RECORDING, SCR_RECORDING, WARN_NONE);
-    m.scratchy = false, m.gsr_state = SENSOR_IDLE;
-    shot(dir, "09_warning_skin_sensor", ST_RECORDING, SCR_RECORDING, WARN_GSR_OFF);
-    m.gsr_state = SENSOR_OK, sm.linked = false;
+    m.scratchy = false, m.temp_state = SENSOR_IDLE;
+    shot(dir, "09_warning_temp_sensor", ST_RECORDING, SCR_RECORDING, WARN_TEMP_OFF);
+    m.temp_state = SENSOR_OK, sm.linked = false;
     shot(dir, "10_warning_offline", ST_RECORDING, SCR_RECORDING, WARN_OFFLINE);
     sm.outbox = 3100;
     shot(dir, "11_warning_memory", ST_RECORDING, SCR_RECORDING, WARN_STORAGE);
     sm.outbox = 3560;  // 98.9%: only scratch episodes are stored now
     shot(dir, "11b_warning_memory_full", ST_RECORDING, SCR_RECORDING, WARN_STORAGE);
-    sm.outbox = 412, sm.linked = true, m.temp_state = SENSOR_ABSENT;
+    sm.outbox = 412, sm.linked = true, m.ecg_state = SENSOR_IDLE, m.hr_bpm = 0;
     shot(dir, "12_sensors", ST_RECORDING, SCR_SENSORS, WARN_NONE);
     m.held_ms = 700;
     shot(dir, "13_hold_to_stop", ST_RECORDING, SCR_HOLD_STOP, WARN_NONE);

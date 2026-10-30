@@ -3,143 +3,131 @@
 #include <math.h>
 #include <stdio.h>
 
+#include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
-#include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/task.h"
-#include "nvs.h"
 #include "skin.h"
 
-#define GSR_READS 8   // averaged per 4 Hz sample
-#define TEMP_READS 32 // one ESP32 ADC read is noisy by a few mV, several tenths of a degree
-#define NVS_KEY "gsr_noskin"
-#define FLOAT_CHECK_EVERY 8    // 4 Hz samples between "is anything driving the GSR pin?" checks: 2 s
-#define FLOAT_SWING_MV 300     // a floating pin follows the internal pulls by far more than this
 #define TEMP_STEADY_C 1.0f     // real skin temperature never moves this much in a second
-#define TEMP_STEADY_N 3        // seconds of steady readings before the thermistor counts
+#define TEMP_STEADY_N 3        // seconds of steady readings before the LM35 counts
+#define ECG_ON_SAMPLES (SKIN_ECG_HZ * 9 / 10)  // electrodes on for 90% of a second counts as on
 
 static const char *TAG = "skin";
 static adc_oneshot_unit_handle_t adc;
-static adc_cali_handle_t cali;
-static adc_channel_t gsr_ch, temp_ch;
+static adc_cali_handle_t cali_ecg, cali_temp;
+static adc_channel_t ecg_ch, temp_ch;
 static volatile bool sim, sim_stressed, debug;
-static float no_skin = SKIN_GSR_NO_SKIN;
+static TaskHandle_t task;
 
-static float read_mv(adc_channel_t ch, int reads) {
-    int sum = 0, n = 0;
-    for (int i = 0; i < reads; i++) {
-        int raw;
-        if (adc_oneshot_read(adc, ch, &raw) == ESP_OK) sum += raw, n++;
-    }
-    int mv = 0;
-    if (n) adc_cali_raw_to_voltage(cali, sum / n, &mv);
+static int read_mv(adc_channel_t ch, adc_cali_handle_t cali) {
+    int raw = 0, mv = 0;
+    if (adc_oneshot_read(adc, ch, &raw) != ESP_OK) return -1;
+    adc_cali_raw_to_voltage(cali, raw, &mv);
     return mv;
-}
-
-static void load_calibration(void) {
-    nvs_handle_t h;
-    uint32_t v;
-    if (nvs_open("band", NVS_READONLY, &h) != ESP_OK) return;
-    if (nvs_get_u32(h, NVS_KEY, &v) == ESP_OK) no_skin = v / 100.0f;
-    nvs_close(h);
-}
-
-bool skin_gsr_calibrate(float *out) {
-    float a = 0;
-    for (int i = 0; i < 16; i++) {
-        a += skin_gsr_reading(read_mv(gsr_ch, GSR_READS), SKIN_SUPPLY_MV) / 16;
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-    *out = a;
-    if (a < 300 || a > 700) return false;  // the module reads about 512 with nothing on it
-    nvs_handle_t h;
-    if (nvs_open("band", NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_set_u32(h, NVS_KEY, (uint32_t)(a * 100));
-    nvs_commit(h);
-    nvs_close(h);
-    no_skin = a;
-    return true;
-}
-
-// An unplugged GSR pin floats, and a floating pin can sit at any voltage, even one that reads as
-// skin. A module's output holds its voltage against the ESP32's weak internal pulls; a floating
-// pin follows them. GPIO 32 has internal pulls (GPIO 34, the thermistor's, doesn't).
-static bool gsr_pin_floating(void) {
-    gpio_set_pull_mode(SKIN_GSR_GPIO, GPIO_PULLDOWN_ONLY);
-    vTaskDelay(pdMS_TO_TICKS(2));
-    float low = read_mv(gsr_ch, 4);
-    gpio_set_pull_mode(SKIN_GSR_GPIO, GPIO_PULLUP_ONLY);
-    vTaskDelay(pdMS_TO_TICKS(2));
-    float high = read_mv(gsr_ch, 4);
-    gpio_set_pull_mode(SKIN_GSR_GPIO, GPIO_FLOATING);
-    return high - low > FLOAT_SWING_MV;
 }
 
 void skin_set_sim(bool on) { sim = on; }
 void skin_set_sim_stressed(bool on) { sim_stressed = on; }
 void skin_set_debug(bool on) { debug = on; }
 
+// 250 Hz from a hardware timer: the FreeRTOS tick (100 Hz) is too coarse
+static void tick(void *arg) { xTaskNotifyGive(task); }
+
 static void skin_task(void *arg) {
     QueueHandle_t out = arg;
     skin_sim_t s;
     skin_sim_init(&s, 0x5EED);
+    ecg_det_t det;
+    ecg_det_init(&det);
     skin_reading_t r = {0};
-    bool floating = true;
     float last_c = 0;
-    int steady = 0;
-    TickType_t wake = xTaskGetTickCount();
-    for (int n = 0;; n++) {
-        vTaskDelayUntil(&wake, pdMS_TO_TICKS(1000 / SKIN_GSR_HZ));
-        r.gsr_mv = read_mv(gsr_ch, GSR_READS);
-        if (n % FLOAT_CHECK_EVERY == 0) floating = gsr_pin_floating();
-        bool new_temp = n % SKIN_GSR_HZ == 0;
-        if (new_temp) r.temp_mv = read_mv(temp_ch, TEMP_READS);  // temperature once a second
-        r.sim = sim;
+    int steady = 0, off_run = 0, on_samples = 0, temp_n = 0, i = 0;
+    float temp_sum = 0;
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        // ECG: either lead-off pin high means an electrode is off; two samples in a row, so a
+        // single glitch doesn't reset the beat detector
+        float mv;
+        bool on;
         if (sim) {
             s.stressed = sim_stressed;
-            skin_sim_step(&s, &r.us, &r.c);
+            mv = skin_sim_ecg(&s);
+            on = true;
         } else {
-            r.us = skin_gsr_us(r.gsr_mv, SKIN_SUPPLY_MV, no_skin);
-            r.c = skin_ntc_c(r.temp_mv, SKIN_SUPPLY_MV, SKIN_NTC_SERIES_R, SKIN_NTC_R25, SKIN_NTC_BETA);
+            mv = read_mv(ecg_ch, cali_ecg);
+            off_run = gpio_get_level(SKIN_LO_PLUS_GPIO) || gpio_get_level(SKIN_LO_MINUS_GPIO) ? off_run + 1 : 0;
+            on = off_run < 2;
         }
-        r.gsr_ok = skin_gsr_plausible(r.us) && (sim || !floating);
-        if (new_temp) {  // count it only after a few steady seconds in range: a floating pin wanders
-            bool in_range = skin_temp_plausible(r.c);
-            steady = in_range && fabsf(r.c - last_c) < TEMP_STEADY_C ? steady + 1 : 0;
-            last_c = r.c;
+        r.ecg_mv = mv;
+        on_samples += on;
+        int rr;
+        bool valid;
+        if (ecg_det_feed(&det, mv, on, &rr, &valid) && r.n_beats < SKIN_MAX_BEATS) {
+            r.rr_ms[r.n_beats] = rr;
+            r.rr_valid[r.n_beats++] = valid;
         }
-        r.temp_ok = skin_temp_plausible(r.c) && (sim || steady >= TEMP_STEADY_N);
-        r.gsr_connected = sim || !floating;
-        r.temp_settling = skin_temp_plausible(r.c) && !r.temp_ok;
+        int t_mv = read_mv(temp_ch, cali_temp);
+        if (t_mv >= 0) temp_sum += t_mv, temp_n++;
+
+        if (++i < SKIN_ECG_HZ) continue;
+        // once a second: post it
+        r.temp_mv = temp_n ? temp_sum / temp_n : -1;
+        r.c = sim ? skin_sim_temp(&s) : skin_lm35_c(r.temp_mv);
+        // count it only after a few steady seconds in range: a floating pin wanders
+        bool in_range = skin_temp_plausible(r.c);
+        steady = in_range && fabsf(r.c - last_c) < TEMP_STEADY_C ? steady + 1 : 0;
+        last_c = r.c;
+        r.temp_ok = in_range && (sim || steady >= TEMP_STEADY_N);
+        r.temp_settling = in_range && !r.temp_ok;
+        r.ecg_on = on_samples >= ECG_ON_SAMPLES;
+        r.hr_bpm = r.ecg_on ? ecg_det_bpm(&det) : 0;
+        r.sim = sim;
         xQueueSend(out, &r, 0);
-        if (debug && n % SKIN_GSR_HZ == 0)
-            printf("skin: GSR pin %4.0f mV (reading %3.0f, no-skin %3.0f) -> %s | thermistor pin %4.0f mV -> %s%s\n",
-                   r.gsr_mv, skin_gsr_reading(r.gsr_mv, SKIN_SUPPLY_MV), no_skin,
-                   r.gsr_ok ? "on skin" : floating && !sim ? "NOTHING CONNECTED (pin floating)" :
-                   r.us > SKIN_GSR_MAX_US ? "electrodes touching" : "not on skin",
-                   r.temp_mv, r.temp_ok ? "ok" : skin_temp_plausible(r.c) ? "settling (or floating)" : "unplugged or shorted",
-                   sim ? "  [SIMULATED]" : "");
-        if (debug && n % SKIN_GSR_HZ == 0 && (r.gsr_ok || r.temp_ok))
-            printf("skin:   %.2f uS, %.1f C\n", r.us, r.c);
+        if (debug)
+            printf("skin: ECG pin %4.0f mV, electrodes %s, %d beat%s, heart rate %s%.0f | LM35 pin %4.0f mV -> %.1f C %s%s\n",
+                   r.ecg_mv, r.ecg_on ? "on" : "OFF", r.n_beats, r.n_beats == 1 ? "" : "s",
+                   r.hr_bpm > 0 ? "" : "-- ", r.hr_bpm, r.temp_mv, r.c,
+                   r.temp_ok ? "ok" : in_range ? "settling" : "unplugged or out of range", sim ? "  [SIMULATED]" : "");
+        i = 0, on_samples = 0, temp_n = 0, temp_sum = 0;
+        r.n_beats = 0;
     }
+}
+
+static adc_cali_handle_t make_cali(adc_atten_t atten) {
+    adc_cali_line_fitting_config_t c = {.unit_id = ADC_UNIT_1, .atten = atten, .bitwidth = ADC_BITWIDTH_12,
+                                        .default_vref = 1100};
+    adc_cali_handle_t h;
+    ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&c, &h));
+    return h;
 }
 
 void skin_adc_start(QueueHandle_t out) {
     adc_oneshot_unit_init_cfg_t unit = {.unit_id = ADC_UNIT_1};
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit, &adc));
     adc_unit_t u;
-    ESP_ERROR_CHECK(adc_oneshot_io_to_channel(SKIN_GSR_GPIO, &u, &gsr_ch));
+    ESP_ERROR_CHECK(adc_oneshot_io_to_channel(SKIN_ECG_GPIO, &u, &ecg_ch));
     ESP_ERROR_CHECK(adc_oneshot_io_to_channel(SKIN_TEMP_GPIO, &u, &temp_ch));
-    adc_oneshot_chan_cfg_t ch = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_12};  // 0-3.1 V
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc, gsr_ch, &ch));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc, temp_ch, &ch));
-    adc_cali_line_fitting_config_t c = {.unit_id = ADC_UNIT_1, .atten = ADC_ATTEN_DB_12,
-                                        .bitwidth = ADC_BITWIDTH_12, .default_vref = 1100};
-    ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&c, &cali));
-    load_calibration();
-    ESP_LOGI(TAG, "GSR on GPIO %d (no-skin reading %.0f), thermistor on GPIO %d", SKIN_GSR_GPIO, no_skin,
-             SKIN_TEMP_GPIO);
-    xTaskCreatePinnedToCore(skin_task, "skin", 3072, out, 4, NULL, 1);
+    // the ECG swings across most of 0-3.3 V; the LM35 gives 0.30-0.36 V on skin, so 0 dB
+    // (about 0-950 mV) gives it the finest steps
+    adc_oneshot_chan_cfg_t ecg = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_12};
+    adc_oneshot_chan_cfg_t temp = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_0};
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc, ecg_ch, &ecg));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc, temp_ch, &temp));
+    cali_ecg = make_cali(ADC_ATTEN_DB_12);
+    cali_temp = make_cali(ADC_ATTEN_DB_0);
+    // the AD8232 drives LO+/LO- push-pull; 34 is input-only with no pulls anyway
+    gpio_config_t lo = {.pin_bit_mask = (1ULL << SKIN_LO_PLUS_GPIO) | (1ULL << SKIN_LO_MINUS_GPIO),
+                        .mode = GPIO_MODE_INPUT};
+    ESP_ERROR_CHECK(gpio_config(&lo));
+    ESP_LOGI(TAG, "ECG on GPIO %d (lead-off %d/%d), LM35 on GPIO %d, %d Hz", SKIN_ECG_GPIO, SKIN_LO_PLUS_GPIO,
+             SKIN_LO_MINUS_GPIO, SKIN_TEMP_GPIO, SKIN_ECG_HZ);
+    xTaskCreatePinnedToCore(skin_task, "skin", 4096, out, 6, &task, 1);
+    esp_timer_handle_t timer;
+    esp_timer_create_args_t args = {.callback = tick, .name = "ecg"};
+    ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 1000000 / SKIN_ECG_HZ));
 }

@@ -5,10 +5,12 @@
 // detector task scores each second of it; one loop every 20 ms reads the touch pad, handles
 // Bluetooth messages and the detector's results, sends queued readings and redraws. Typing
 // "raw on" on the USB serial line streams the raw 800 Hz samples for tools/record.py. A skin
-// task reads GSR at 4 Hz and the thermistor once a second (skin_adc.c), sent only while they read
-// sensibly; "sim on" stands in for them, "skin on" prints the pins, "gsr cal" calibrates. The website relays the
+// task samples the ECG at 250 Hz and the LM35 (skin_adc.c); every 30 s of electrode contact with
+// the hand still becomes one heart-rate/HRV reading, and skin temperature goes out every 5 s.
+// "sim on" stands in for both sensors, "skin on" prints the pins. The website relays the
 // readings to the laptop hub (app/band.py); recordings made offline wait in the outbox (about
 // an hour of them) and go out when the laptop reconnects.
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,18 +64,18 @@ static void on_ble(ble_event_t ev, uint32_t arg, const char *text) {
 }
 
 // --- outbox: readings waiting for the website --------------------------------------------
-typedef enum { ITEM_MOTION, ITEM_SCRATCH, ITEM_GSR, ITEM_TEMP } item_kind_t;
-// 16 bytes, so the outbox still holds an hour of motion; a GSR item packs a second (4 readings).
-// With GSR on, about 2.2 items a second: the outbox then covers about 27 minutes offline.
+typedef enum { ITEM_MOTION, ITEM_SCRATCH, ITEM_HRV, ITEM_TEMP } item_kind_t;
+// 16 bytes. While recording: motion every second, temperature every 5 s, a heart reading every
+// 30 s of ECG contact, so about 1.25 items a second.
 typedef struct {
     uint16_t recording;
-    uint8_t kind, n;  // n: GSR readings in v
-    float t;          // s since the recording started (GSR: its first reading)
+    uint8_t kind, n;
+    float t;          // s since the recording started (HRV: its window's start)
     union {
         struct {
             float a, b;  // motion: activity, scratch_energy; scratch: duration_s, intensity; temp: a = C
         };
-        uint16_t v[4];   // GSR in hundredths of a microsiemens, 4 Hz
+        uint16_t v[4];   // HRV: heart rate, RMSSD, SDNN in tenths (bpm, ms, ms), and good beats
     };
 } item_t;
 _Static_assert(sizeof(item_t) == 16, "an item is 16 bytes");
@@ -82,7 +84,7 @@ static item_t item(uint32_t rec, item_kind_t kind, float t, float a, float b) {
     return (item_t){.recording = (uint16_t)rec, .kind = kind, .t = t, .a = a, .b = b};
 }
 // The outbox lives in flash (the "outbox" partition, store.c): about 159,000 readings, roughly
-// 20 hours offline with GSR on, kept across restarts. When it fills, older data is kept and new
+// 35 hours of recording offline, kept across restarts. When it fills, older data is kept and new
 // data thins out: motion every 10 s from 90%, only scratch episodes from 98%, and when it's
 // completely full a scratch episode replaces the oldest sector.
 static store_t store;
@@ -101,8 +103,8 @@ static void ob_alloc(void) {
     }
     ob_len = store_capacity(&store);
     ob_count = store_count(&store);
-    ESP_LOGI(TAG, "outbox in flash: %d readings (about %d h offline with GSR on), %d waiting from before",
-             ob_len, ob_len * 10 / 22 / 3600, ob_count);
+    ESP_LOGI(TAG, "outbox in flash: %d readings (about %d h of recording offline), %d waiting from before",
+             ob_len, ob_len * 4 / 5 / 3600, ob_count);
 }
 
 static void ob_push(item_t it) {
@@ -121,14 +123,10 @@ static void ob_format(const item_t *it, char *buf, size_t n) {
         snprintf(buf, n, "{\"r\":%u,\"scratch_events\":[{\"t\":%.1f,\"duration_s\":%.1f,\"intensity\":%.4f}]}",
                  it->recording, it->t, it->a, it->b);
         break;
-    case ITEM_GSR: {  // {"r":3,"gsr":[{"t":12.25,"microsiemens":1.84},...]}, as docs/DERMEDGE_APP_GUIDE.md says
-        int k = snprintf(buf, n, "{\"r\":%u,\"gsr\":[", it->recording);
-        for (int i = 0; i < it->n && k < (int)n; i++)
-            k += snprintf(buf + k, n - k, "%s{\"t\":%.2f,\"microsiemens\":%.2f}", i ? "," : "",
-                          it->t + (float)i / SKIN_GSR_HZ, it->v[i] / 100.0f);
-        if (k < (int)n) snprintf(buf + k, n - k, "]}");
+    case ITEM_HRV:  // {"r":3,"hrv":[{"t":30.0,"hr":71.8,"rmssd":42.5,"sdnn":51.0,"beats":36}]}, docs/DERMEDGE_APP_GUIDE.md
+        snprintf(buf, n, "{\"r\":%u,\"hrv\":[{\"t\":%.1f,\"hr\":%.1f,\"rmssd\":%.1f,\"sdnn\":%.1f,\"beats\":%u}]}",
+                 it->recording, it->t, it->v[0] / 10.0f, it->v[1] / 10.0f, it->v[2] / 10.0f, it->v[3]);
         break;
-    }
     case ITEM_TEMP:
         snprintf(buf, n, "{\"r\":%u,\"skin_temp\":[{\"t\":%.1f,\"c\":%.2f}]}", it->recording, it->t, it->a);
         break;
@@ -136,7 +134,7 @@ static void ob_format(const item_t *it, char *buf, size_t n) {
 }
 
 static void ob_send(void) {
-    char buf[200];  // a GSR item is about 145 characters, under the ~180 a notification carries on macOS
+    char buf[200];  // an HRV item is about 90 characters, under the ~180 a notification carries on macOS
     item_t it;
     for (int i = 0; i < SENDS_PER_LOOP && ble_data_ready() && store_peek(&store, &it); i++) {
         ob_format(&it, buf, sizeof(buf));
@@ -156,30 +154,31 @@ static char label[24] = "day";
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 
 static void send_status(void) {
-    char buf[240], gsr[16] = "null", tc[16] = "null";
-    if (ui.gsr_ok) snprintf(gsr, sizeof(gsr), "%.2f", ui.gsr_us);
+    char buf[240], hr[16] = "null", tc[16] = "null";
+    if (ui.hr_bpm > 0) snprintf(hr, sizeof(hr), "%.0f", ui.hr_bpm);
     if (ui.temp_ok) snprintf(tc, sizeof(tc), "%.1f", ui.skin_c);
-    // gsr / tc: the live skin readings (null while off skin or unplugged); sim: 1 while simulated
+    // ecg: 1 while the electrodes are on; hr / tc: live heart rate and skin temperature (null while
+    // not reading); sim: 1 while simulated
     snprintf(buf, sizeof(buf),
              "{\"id\":\"%s\",\"s\":\"%s\",\"r\":%lu,\"src\":\"%s\",\"label\":\"%s\",\"el\":%.1f,"
-             "\"n\":%lu,\"act\":%.3f,\"q\":%d,\"alert\":%d,\"gsr\":%s,\"tc\":%s,\"sim\":%d}",
+             "\"n\":%lu,\"act\":%.3f,\"q\":%d,\"alert\":%d,\"ecg\":%d,\"hr\":%s,\"tc\":%s,\"sim\":%d}",
              ble_device_id(), sm_state_name(sm.state), (unsigned long)sm.recording,
              sm.source == SRC_TOUCH ? "touch" : "website", label,
              sm.state == ST_RECORDING ? ui.elapsed_s : 0.0f, (unsigned long)ui.scratches, ui.activity, ob_count,
-             sm.alert, gsr, tc, ui.skin_sim);
+             sm.alert, ui.ecg_on, hr, tc, ui.skin_sim);
     ble_notify_status(buf);
 }
 
-// --- skin readings: GSR packed four to an item, temperature averaged over 5 s ---------------
+// --- heart and temperature: 30 s HRV windows while the hand is still, temperature every 5 s ----
 #define TEMP_EVERY_S 5
+#define STILL_G 0.03f  // motion RMS under this (and not scratching) counts as still; scratching starts at 0.04 g
 static QueueHandle_t skin_q;
-static item_t gsr_item;  // filling: n readings so far
-static float temp_sum, temp_t0;
+static hrv_win_t hrv_win;
+static float hrv_t0, temp_sum, temp_t0;
 static int temp_n;
 
-static void skin_flush(void) {
-    if (gsr_item.n) ob_push(gsr_item);
-    gsr_item.n = 0;
+static void skin_flush(void) {  // a part-window of ECG isn't a reading; a part of 5 s of temperature is
+    hrv_win_reset(&hrv_win);
     if (temp_n) ob_push(item(sm.recording, ITEM_TEMP, temp_t0, temp_sum / temp_n, 0));
     temp_n = 0;
     temp_sum = 0;
@@ -188,23 +187,32 @@ static void skin_flush(void) {
 static void skin_results(uint32_t now) {
     skin_reading_t r;
     while (xQueueReceive(skin_q, &r, 0)) {
-        ui.gsr_ok = r.gsr_ok, ui.temp_ok = r.temp_ok, ui.skin_sim = r.sim;
-        ui.gsr_state = r.gsr_ok ? SENSOR_OK : r.gsr_connected ? SENSOR_IDLE : SENSOR_ABSENT;
+        ui.ecg_on = r.ecg_on, ui.hr_bpm = r.hr_bpm, ui.temp_ok = r.temp_ok, ui.skin_sim = r.sim;
+        ui.ecg_state = r.ecg_on ? SENSOR_OK : SENSOR_IDLE;
         ui.temp_state = r.temp_ok ? SENSOR_OK : r.temp_settling ? SENSOR_IDLE : SENSOR_ABSENT;
-        if (r.gsr_ok) ui.gsr_us = r.us;
         if (r.temp_ok) ui.skin_c = r.c;
         if (sm.state != ST_RECORDING) continue;
         float t = (now - rec_start_ms) / 1000.0f;
-        if (r.gsr_ok) {
-            if (!gsr_item.n) gsr_item = (item_t){.recording = (uint16_t)sm.recording, .kind = ITEM_GSR, .t = t};
-            gsr_item.v[gsr_item.n++] = (uint16_t)(r.us * 100 + 0.5f);
-            if (gsr_item.n == 4) {
-                ob_push(gsr_item);
-                gsr_item.n = 0;
+        // a window is 30 s of unbroken electrode contact; electrodes off starts over
+        if (!r.ecg_on) {
+            hrv_win_reset(&hrv_win);
+        } else {
+            if (!hrv_win.secs) hrv_t0 = t;
+            for (int i = 0; i < r.n_beats; i++) hrv_win_add_rr(&hrv_win, r.rr_ms[i], r.rr_valid[i]);
+            hrv_win_add_second(&hrv_win, ui.activity < STILL_G && !ui.scratchy);
+            if (hrv_win_full(&hrv_win)) {
+                hrv_t h;
+                if (hrv_win_result(&hrv_win, &h)) {
+                    item_t it = {.recording = (uint16_t)sm.recording, .kind = ITEM_HRV, .t = hrv_t0};
+                    it.v[0] = (uint16_t)(h.hr * 10 + 0.5f), it.v[1] = (uint16_t)fminf(h.rmssd * 10 + 0.5f, 65535);
+                    it.v[2] = (uint16_t)fminf(h.sdnn * 10 + 0.5f, 65535), it.v[3] = (uint16_t)h.beats;
+                    ob_push(it);
+                    ESP_LOGI(TAG, "heart: %.0f bpm, RMSSD %.0f ms, SDNN %.0f ms (%d beats)", h.hr, h.rmssd, h.sdnn, h.beats);
+                } else {
+                    ESP_LOGI(TAG, "heart: 30 s window not usable (moving, or too few clean beats)");
+                }
+                hrv_win_reset(&hrv_win);
             }
-        } else if (gsr_item.n) {  // electrodes came off: send what there is, so times stay exact
-            ob_push(gsr_item);
-            gsr_item.n = 0;
         }
         if (r.temp_ok) {
             if (!temp_n) temp_t0 = t;
@@ -353,7 +361,7 @@ static void peek(int from) {
 }
 
 // From the USB serial line: "raw on/off" (tools/record.py), "sim on/stress/off", "skin on/off",
-// "gsr cal", "peek", and anything the website can send (start, stop, ...)
+// "peek", and anything the website can send (start, stop, ...)
 static void serial_commands(void) {
     static char line[32];
     static int len;
@@ -369,19 +377,14 @@ static void serial_commands(void) {
             esp_log_level_set("*", ESP_LOG_NONE);  // nothing but frames on the line
             raw_mode = true;
         } else if (!strcmp(line, "sim on") || !strcmp(line, "sim stress")) {
-            skin_set_sim(true);  // fake GSR and temperature, marked SIM on the screen and "sim":1 in the status
+            skin_set_sim(true);  // fake ECG and temperature, marked SIM on the screen and "sim":1 in the status
             skin_set_sim_stressed(!strcmp(line, "sim stress"));
-            ESP_LOGI(TAG, "skin sensors simulated (%s)", strcmp(line, "sim stress") ? "calm" : "stressed");
+            ESP_LOGI(TAG, "heart and temperature simulated (%s)", strcmp(line, "sim stress") ? "calm" : "stressed");
         } else if (!strcmp(line, "sim off")) {
             skin_set_sim(false);
-            ESP_LOGI(TAG, "skin sensors real");
+            ESP_LOGI(TAG, "heart and temperature real");
         } else if (!strcmp(line, "skin on") || !strcmp(line, "skin off")) {
             skin_set_debug(!strcmp(line, "skin on"));
-        } else if (!strcmp(line, "gsr cal")) {  // with the electrodes off the skin
-            float a;
-            bool ok = skin_gsr_calibrate(&a);
-            if (ok) ESP_LOGI(TAG, "GSR calibrated: no-skin reading %.0f, saved", a);
-            else ESP_LOGW(TAG, "GSR calibration refused: reading %.0f is far from 512. Electrodes off? Module wired?", a);
         } else if (!strcmp(line, "raw off")) {
             raw_mode = false;
             esp_log_level_set("*", ESP_LOG_INFO);
@@ -434,7 +437,7 @@ static int command(char *c) {
 static int apply(int fx) {
     if (fx & FX_START_REC) {
         save_recording_number();
-        gsr_item.n = 0, temp_n = 0, temp_sum = 0;
+        hrv_win_reset(&hrv_win), temp_n = 0, temp_sum = 0;
         uint8_t c = DET_RESET;
         xQueueSend(det_cmds, &c, portMAX_DELAY);
         rec_start_ms = now_ms();
@@ -445,7 +448,7 @@ static int apply(int fx) {
     if (fx & FX_STOP_REC) {
         uint8_t c = DET_FLUSH;  // an episode still open comes back as OUT_FLUSHED, for this recording
         flush_rec = sm.recording;
-        skin_flush();  // the last part-second of GSR and temperature
+        skin_flush();  // the last few seconds of temperature
         xQueueSend(det_cmds, &c, portMAX_DELAY);
         ui.has_last = true;
         ui.last_minutes = ui.elapsed_s / 60;

@@ -266,10 +266,10 @@ def band_data_loop():
          "A paired rule (patch vs own healthy skin) flags all 13.",
          "Known biomarkers work; what's missing is everyday data.")
     note(ax, 1030, 590, 920, 300, "What the band already does",
-         "Scratch detection on the band: 4 of 4 scratch clips found,",
-         "0 false alarms in 12 everyday clips (one wearer, held out)",
-         "Stress from heart rate and HRV against your own calm",
-         "baseline (WESAD study, 15 people)",
+         "Scratch detection on the band: 22 of 26 scratch clips found",
+         "across 7 people, each tested by a model that never saw them",
+         "ECG check: heart rate and HRV against your own calm",
+         "baseline; LM35 wrist temperature alongside",
          "Live readings in the app; flare alerts on the band's screen",
          "Every recording kept for the doctor, never uploaded",
          "")

@@ -9,6 +9,11 @@ Runs on Google Colab (Runtime > Change runtime type > T4 GPU) or any CUDA machin
     !pip -q install timm onnx onnxruntime transformers
     !python scripts/train_phone_student.py --download-scin --out /content/student
 
+To survive a disconnect, mount Google Drive and keep the photos and output there; rerunning the
+same command then skips photos already downloaded and resumes after the last finished epoch:
+    from google.colab import drive; drive.mount('/content/drive')
+    !python scripts/train_phone_student.py --download-scin --scin-dir /content/drive/MyDrive/dermedge/scin         --out /content/drive/MyDrive/dermedge/student
+
 Training images: every SCIN photo (about 10,000 real phone photos of skin, public bucket, no
 login), plus any folders passed with --extra (e.g. the Kaggle Human Skin Diseases set). No
 labels are needed: the teacher's embedding is the target. 10% of SCIN cases are held out, and
@@ -219,6 +224,15 @@ def main():
     steps = args.epochs * math.ceil(len(Xtr) / args.batch)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=steps, pct_start=0.1)
     scaler = torch.amp.GradScaler(enabled=dev == "cuda")
+    # saved after every epoch, so a rerun with the same --out picks up where a disconnect left off
+    ckpt_path = out / "checkpoint.pt"
+    start = 0
+    if ckpt_path.exists():
+        ck = torch.load(ckpt_path, map_location=dev, weights_only=False)  # our own file
+        student.load_state_dict(ck["student"]); opt.load_state_dict(ck["opt"])
+        sched.load_state_dict(ck["sched"]); scaler.load_state_dict(ck["scaler"])
+        start = ck["epoch"]
+        print(f"resuming after epoch {start} from {ckpt_path}")
 
     def embed_all(X, model_fn):
         outs = []
@@ -229,7 +243,7 @@ def main():
         return torch.cat(outs).numpy()
 
     t_val = embed_all(Xva, lambda x: teacher(x.half()))
-    for ep in range(args.epochs):
+    for ep in range(start, args.epochs):
         student.train(); perm = torch.randperm(len(Xtr)); tot = 0; t = time.time()
         for i in range(0, len(perm), args.batch):
             x = augment(Xtr[perm[i:i + args.batch]], dev, True)
@@ -244,6 +258,12 @@ def main():
         s_val = embed_all(Xva, lambda x: student((x - mean) / std))
         cos = float(np.mean(np.sum(s_val * t_val, axis=1)))
         print(f"epoch {ep + 1}/{args.epochs}  train cos {1 - tot / len(Xtr):.4f}  held-out cos {cos:.4f}  ({time.time() - t:.0f} s)")
+        torch.save(dict(student=student.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
+                        scaler=scaler.state_dict(), epoch=ep + 1), ckpt_path)
+
+    student.eval()
+    s_val = embed_all(Xva, lambda x: student((x - mean) / std))
+    cos = float(np.mean(np.sum(s_val * t_val, axis=1)))
 
     torch.save(student.state_dict(), out / "student.pt")
     student = student.float().cpu().eval()

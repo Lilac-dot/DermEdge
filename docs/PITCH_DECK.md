@@ -1,5 +1,7 @@
 # DermEdge pitch deck: slide text for the Canva rebuild
 
+**The deck in Canva:** https://canva.link/sjz2ti8lsuddh4j (the team's working copy; this file has its text).
+
 Drafted 26 Oct 2026 from the current plan ([HARDWARE_PLAN.md](HARDWARE_PLAN.md) decisions log),
 replacing the older `DermEdge Pitch (with diagrams).pptx`. Each slide lists the headings and text
 to paste in, and the diagram to place. Diagrams are in `docs/architecture/` (3200 × 1800 PNG);

@@ -6,6 +6,8 @@ DermEdge checks a photo of skin in three stages, tracks each body site over time
 
 **Live demo: https://derm-edge.vercel.app** (runs on your device; the first visit downloads the skin model once).
 
+**Pitch deck:** [Canva](https://canva.link/sjz2ti8lsuddh4j), with its slide text in [docs/PITCH_DECK.md](docs/PITCH_DECK.md).
+
 Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the **Telemedicon 2026 AI & Digital Health Hackathon**, IIIT Sri City.
 
 | Home | Check |

@@ -2,240 +2,238 @@
 
 **The deck in Canva:** https://canva.link/sjz2ti8lsuddh4j (the team's working copy; this file has its text).
 
-Drafted 26 Oct 2026 from the current plan ([HARDWARE_PLAN.md](HARDWARE_PLAN.md) decisions log),
-replacing the older `DermEdge Pitch (with diagrams).pptx`. Each slide lists the headings and text
-to paste in, and the diagram to place. Diagrams are in `docs/architecture/` (3200 × 1800 PNG);
-`python scripts/draw_architecture.py` redraws slides 5, 9 and 10's.
+Rewritten 31 Oct 2026 for the finale format: **10 minutes in total, including a 3-5 minute demo
+video.** That leaves about 5-6 minutes of talking, so the deck is 12 slides plus the video, about
+30 seconds per slide. Diagrams are in `docs/architecture/` (3200 × 1800 PNG);
+`python scripts/draw_architecture.py` redraws them.
 
-**What changed from the old deck**
-- Photos come from the **phone or laptop camera** (website or hub). The **ESP32-CAM moves to
-  future scope**; its slide is replaced by the DermEdge band.
-- The **"GSR wristband"** is now the **DermEdge band**: an ESP32 on the back of the hand that
-  detects scratching with a model trained on our recordings, over encrypted Bluetooth.
-- **Skin temperature is a stress input only** (one LM35, since 31 Oct; was a thermistor), not an eczema signal.
-- **31 Oct: ECG replaces GSR** for stress, and skin moisture is dropped. The ECG is a seated 1-2
-  minute check with electrodes on both wrists (Lead I), not all-day wear; the research for and
-  against each sensor is in [SENSORS.md](SENSORS.md). The lesion-vs-healthy temperature pair is
-  dropped, so it's off the future-scope slide. The stress model is being
-  retrained on WESAD's chest ECG; until its numbers are in, the GSR figures below are marked as
-  the previous model and must be swapped or caveated before presenting.
-- **31 Oct: the skin model runs in tiers:** full CLIP model on laptops (WebGPU), a ~17 MB phone
-  model that copies CLIP's embedding on phones ([TONIGHT_PLAN.md](TONIGHT_PLAN.md)).
-- **Stress numbers:** quote the band's GSR model (90% accuracy, 73% of stress caught), not the old
-  four-signal LightGBM's AUC 0.92-0.94. That model turned out to call 50% of meditation and
-  amusement windows "stress": it had partly learned "later in the session"
-  (`scripts/train_gsr_stress.py`).
-- New slides: the band, data and validation, and future scope.
+**What changed since the 26 Oct draft**
+- **The skin model was rebuilt** (slides 6-8). Stage 2 is no longer a separate ResNet18: it's a
+  head on the same CLIP embedding, retrained with South Asian hospital photos. Old numbers
+  (81.1% accuracy, AUC 0.93, 67% → 83% calibration, Grad-CAM) are gone: use the numbers here.
+- **Sensors:** ADXL345 (scratching), AD8232 ECG check on both wrists (stress), LM35 (skin
+  temperature). GSR and the moisture patch are dropped from the band; moisture moves to future
+  scope.
+- **The phone model is dropped for the finale.** The full model now loads on phones (WebAssembly),
+  so the 17 MB phone model is future scope.
+- **New slides:** the old vs new model, hardware and biomarkers, and DermEdge vs the market.
 
 Footer for every slide: **Telemedicon 2026 · Finale · MGUMST Jaipur** (check the organisers'
 exact name for the round).
+
+## Timing
+
+| Time | Slide |
+|---|---|
+| 0:00 | 1 Title, 2 Problem |
+| 1:00 | 3 Solution |
+| 1:30 | **Demo video, 3-5 min** (slide 4 is its title card) |
+| 5:30 | 5 Architecture, 6 Old vs new, 7 Stages 1-2, 8 Stage 3 |
+| 7:15 | 9 Hardware and biomarkers, 10 Data to diagnosis |
+| 8:30 | 11 Results, 12 DermEdge vs the market |
+| 9:30 | 13 Impact and future scope, close |
+
+If the video runs 5 minutes, merge slides 7 and 8, and say slide 10 in one sentence.
 
 ---
 
 ## 1. Title
 
 - TELEMEDICON 2026 · AI & DIGITAL HEALTH HACKATHON
-- Finale · MGUMST Jaipur · 31 Oct - 1 Nov 2026
 - **DermEdge**
 - Private AI eczema screening and flare tracking, on your own device
 - Team DermEdge: Tishya Yadlapalli, Nitish GB, Shreeya Jetti
 
-## 2. Problem statement & validation
+## 2. The problem
 
 **THE PROBLEM**
 Eczema flares between doctor visits, is easily confused with look-alikes (psoriasis, fungal
-infections) that need different treatment, and most skin-AI tools upload photos and work worse on
-darker skin.
+infections, scabies) that need different treatment, and most skin AI is trained on lighter skin.
 
-**WHO IS AFFECTED?**
-Children and adults with eczema, their families, and dermatologists with only minutes per visit,
-especially where skin specialists are few.
-
-**VALIDATION / EVIDENCE**
+**THE EVIDENCE**
 - Highest burden of any skin disease; 15th of all non-fatal diseases (GBD 2017, Laughter et al.)
 - About 204 million people affected worldwide (BJD global meta-analysis)
 - 8.5% of school children in a Central India survey (Agarwal et al., EJPD)
 - Dermatology atlases hold 3.6× more lightest- than darkest-skin images (Groh et al., Fitzpatrick17k)
 
-**CURRENT ALTERNATIVES & GAPS**
-Clinic visits, paper diaries and cloud symptom-checker apps. Gaps: nothing tracks the days
-between visits, no trigger data, photos uploaded to the cloud, skin-tone bias.
+**THE GAP**
+Doctors see a snapshot every few weeks. Nothing records the days in between: no photos over time,
+no scratching or stress data, and the apps that exist upload photos to the cloud.
 
-## 3. Proposed solution & innovation
+## 3. Our solution
 
-**SOLUTION OVERVIEW**
-DermEdge pairs any phone or laptop camera with the DermEdge band, a wearable on the back of the
-hand. All the AI runs on the user's own device: it checks skin for a rash, tells eczema from
-look-alikes, scores severity, and turns scratching, stress and dry skin into a daily flare risk.
+**DermEdge = a camera check + a wearable band + a doctor report, all on your own device.**
+- **Is there a rash? Is it eczema? How severe?** Three answers from one photo, in the browser
+- **The DermEdge band** records scratching, stress (ECG) and skin temperature, and shows alerts
+- **Tracks every body site over time**, with treatments, triggers and a printable doctor report
+- **Private:** no photo leaves the device; works offline once installed
 
-**KEY FEATURES**
-- Live rash check with a heatmap of where the model looked
-- Eczema vs 7 look-alikes, and severity on a 0-12 scale
-- The DermEdge band: detects scratching, alerts on its own screen
-- Body-site progress, treatment log, trigger insights, doctor report
+## 4. Demo (video, 3-5 minutes)
 
-**HOW IT WORKS**
-Photo → quality check → normal vs rash → eczema vs look-alikes → severity.
-Band and journal → scratching, stress, dry skin → trigger index.
-Image score × trigger index → flare risk + tips → dashboard, band alert, doctor report.
+Title card: **"DermEdge in action"**. Two parts, recorded separately:
 
-**INNOVATION & TECHNOLOGY**
-- Skin-tone calibration: darker-skin rash detection from 67% to 83%
-- Runs in the browser, offline after one download, as an installable app: no photo leaves the device
-- Sized to the device: the full model on laptops, a 17 MB phone model that gives the same embedding, so the same heads and skin-tone calibration apply
-- A scratch detector trained on our own recordings, running on the band's ESP32
-- CLIP, ResNet18 and a calibrated stress model, fused into one flare score
+**Part A: the skin check (website, phone)**
+1. Open derm-edge.vercel.app on a phone, show the install as an app
+2. Point the camera at healthy skin: "No rash"
+3. Show an eczema photo: rash → eczema → severity band; on a laptop, the heatmap
+4. The History tab: one body site improving over time; open the doctor report
 
-## 4. Technical methodology
+**Part B: the band receiving sensor data**
+1. The band powering on, pairing over Bluetooth with the 6-digit code on its screen
+2. Start a recording from the band's touch pad
+3. Scratching: the band detects an episode, the website's count goes up
+4. ECG check (electrodes on both wrists) and skin temperature arriving in the website live
+5. A flare alert sent to the band's screen, dismissed with a double tap
 
-**1 INPUT**
-- Skin photo (phone or laptop camera)
-- DermEdge band: accelerometer (scratching); a seated 1-2 minute ECG check (AD8232, electrodes on both wrists) and an LM35 wrist temperature (stress)
-- Journal, skin type
-
-**2 PROCESSING**
-- Blur and lighting quality gate
-- CLIP rash screen → ResNet18 → severity
-- Scratch model on the band; stress model calibrated to the wearer's own calm baseline
-- Noisy-OR trigger index × image score
-
-**3 OUTPUT**
-- Verdict, severity, heatmap
-- Flare risk + one tip per trigger; high-risk alerts on the band
-- History and printable doctor report
-
-**TECHNICAL DETAILS**
-Built: a static web app (WebGPU / ONNX Runtime Web, installable, offline), a FastAPI laptop hub
-with logins, and ESP-IDF firmware for the band (Bluetooth LE, passkey-paired). Data: SCIN,
-a curated eczema / look-alike set, WESAD, the Southampton moisture study, and
-83 scratch recordings from 6 volunteers. Results: rash AUC 0.93, eczema recall 82.5%, severity
-within one band 97.6%, stress 90% accuracy (leave-one-person-out). Privacy: on-device only,
-consent at setup, delete-all.
+Keep the website's sensor charts on screen for a few seconds: that's the "data a doctor can read"
+moment for slide 10.
 
 ## 5. System architecture
 
-Diagram: `docs/architecture/0_full_system.png`
+Diagram: `docs/architecture/0_full_system.png` (redrawn 31 Oct)
 
-Optional caption: Everything runs on the user's device. The image path and the wearable path meet
-in one flare-risk score; the ESP32-CAM (dashed) is future scope.
+Caption: Two paths, one device. The camera path answers rash, eczema and severity; the band path
+records scratching and stress; both meet in a daily flare risk and the doctor report.
 
-## 6. Stage 1: rash screening (CLIP)
+## 6. How the skin model evolved
 
-Diagram: `docs/architecture/1_stage1_clip_rash.png` (unchanged)
+Diagram: `docs/architecture/7_old_vs_new.png` (new)
 
-Optional caption: One frozen CLIP pass, two uses: a skin check and a trained rash head. AUC 0.93 on
-held-out real phone photos.
+Talking point: *"Our first model scored 81% on textbook photos. When we tested it on real hospital
+photos from South Asia, it struggled. So we rebuilt it: one shared CLIP pass with three trained
+heads, retrained with South Asian hospital photos. It now catches 84% of those rashes instead of
+33%, and works as well on darker skin as on lighter skin."*
 
-## 7. Stage 2: eczema vs look-alikes (ResNet18 + Grad-CAM)
+## 7. Stages 1 and 2: rash, then eczema vs look-alikes
 
-Diagram: `docs/architecture/2_stage2_resnet_gradcam.png` (unchanged)
+Diagrams: `docs/architecture/1_stage1_clip_rash_v2.png` and
+`docs/architecture/2_stage2_clip_head_v2.png` (both new). Use one per half of the slide, or two
+slides if time allows.
 
-Optional caption: 81.1% accuracy, 82.5% eczema recall on 507 test images; the heatmap shows where it
-looked.
+Captions:
+- Stage 1: AUC 0.92 on real phone photos; 86% of rashes caught on the darkest skin types, the same
+  as on lighter skin.
+- Stage 2: AUC 0.87 on South Asian hospital photos; on par with dermatology foundation models
+  (DermLIP, PanDerm) in our head-to-head test.
 
-## 8. Stage 3: severity scoring
+## 8. Stage 3: severity
 
 Diagram: `docs/architecture/3_stage3_severity.png` (unchanged)
 
-Optional caption: Reuses the CLIP embedding. Mean error 1.2 points out of 12; within one band
-97.6% of the time.
+Caption: The same CLIP embedding, a third head: four EASI signs scored 0-12. Within one severity
+band 97.6% of the time; mean error 1.2 points.
 
-## 9. Stage 4: wearable triggers & flare risk
+## 9. The hardware: the DermEdge band
 
-Diagram: `docs/architecture/4_wearable_flare_risk.png` (redrawn)
+Photo of the band on the breadboard, plus `docs/architecture/6_band_scratch.png`.
 
-Optional caption: Stress and scratching are learned from data; the fusion is a stated rule,
-because no dataset pairs photos with wearables.
+**ON THE BAND**
+- **ADXL345 accelerometer** on the back of the hand: scratch detection running on the ESP32
+- **AD8232 ECG**, a 1-2 minute seated check with electrodes on both wrists: heart rate and HRV for stress
+- **LM35 skin temperature**: a stress input
+- Touch pad, 1.8" screen for alerts, encrypted Bluetooth, about 20 hours of offline storage
 
-## 10. The DermEdge band
+**KNOWN BIOMARKERS CAN FLAG ECZEMA: THE SOUTHAMPTON STUDY**
+We analysed the Southampton e-textile study (13 patients with eczema, University of Southampton,
+2026). Comparing each patient's eczema skin with their own healthy skin:
+- The wearable moisture sensor read lower on eczema skin in **13 of 13 patients**
+- The clinical standard (Corneometer) agreed in **13 of 13**; water loss (TEWL) was higher in **7 of 7**
 
-Diagram: `docs/architecture/6_band_scratch.png` (new; replaces the ESP32-CAM slide)
+So a wearable reading of skin barrier biomarkers separates eczema skin from healthy skin. This is
+the basis for a moisture patch on a future band.
 
-Optional caption: An ESP32 on the back of the hand: scratch detection on the device, an hour of
-offline buffering, encrypted Bluetooth, and alerts on its own screen.
+## 10. From data to diagnosis
 
-## 11. Data, validation & privacy
+**TODAY: THE BAND COLLECTS THE DATA**
+No public dataset pairs our sensors (scratching, ECG, skin temperature) with eczema outcomes. So
+the band records them, and the website charts each recording with a CSV download: a doctor reads
+scratching at night, stress and temperature next to the photo history.
 
-**HOW WE TESTED**
+**NEXT: DOCTORS LABEL, THE DATA POOLS**
+Every recording a doctor reviews becomes labelled data: this night, this flare, this severity.
 
-| Model | Result | Test |
+**THEN: A MODEL AUTOMATES IT**
+Once enough data pools up, a model learns the patterns, as we did for stress from WESAD and for
+scratching from our own recordings. The doctor then only confirms.
+
+Visual: three steps, left to right: **Collect → Doctor validates → Model automates**.
+
+## 11. Results
+
+| What | Result | How we tested |
 |---|---|---|
-| Normal vs rash | AUC 0.93; 1,182 of 1,444 rashes caught, 84 of 90 healthy cleared | SCIN phone photos, 5-fold CV grouped by case |
-| Eczema vs look-alikes | 81.1% accuracy, 82.5% recall | 507-image test split |
-| Severity | Mean error 1.2 / 12; within one band 97.6% | Held-out validation set |
-| Stress (GSR model; ECG retrain pending) | 90% accuracy; 73% of stress caught | WESAD, leave-one-person-out, 15 people |
-| Scratching | 4 of 4 scratch clips, 0 false episodes in 12 others | One wearer, held-out round |
-| Moisture | Eczema skin read lower in 13 of 13 patients | Southampton e-textile study |
+| Rash or not (stage 1) | **AUC 0.92**, 88% of rashes caught | Real phone photos (SCIN), people the model never saw |
+| Rashes on South Asian hospital photos | **84% caught** (first version: 33%) | SkinDisNet, 1,710 photos, 2 hospitals in Bangladesh |
+| Darkest skin types (Fitzpatrick V-VI) | **86% caught, AUC 0.95**, the same as lighter skin | SCIN, by skin type |
+| Eczema vs look-alikes (stage 2) | **AUC 0.87**; 78% of eczema caught, 81% of look-alikes cleared | South Asian hospital photos, 5-fold cross-validation |
+| Severity (stage 3) | **97.6%** within one band; mean error 1.2 / 12 | Held-out validation set |
+| Scratch detection | 4 of 4 scratch clips, 0 false alarms in 12 others | One wearer, held-out round |
+| Skin barrier biomarker | Eczema skin drier in **13 of 13** patients | Southampton e-textile study |
 
-**FAIRNESS**
-At one threshold the rash screen caught 84% of rashes on Fitzpatrick I-IV but 67% on V-VI;
-skin-type calibration brings V-VI to 83%.
+## 12. DermEdge vs the market
 
-**HONEST DATA**
-Real public datasets for every model. We augment them with our own sensors' measured noise, test
-only on real people the model never saw, and never synthesise paired data for real patients.
+| | **DermEdge** | Google MedSigLIP | Google Derm Foundation | DermLIP (Derm1M) |
+|---|---|---|---|---|
+| Skin-condition AUC | **0.92** rash screen; **0.87** eczema on South Asian photos | 0.88 | 0.84 | 0.91 on South Asian photos, vs our 0.89 in the same test |
+| Says if there's a rash | ✔ | needs a head per task | needs a head per task | needs a head per task |
+| Eczema vs look-alikes | ✔ | – | – | – |
+| Severity score | ✔ | – | – | – |
+| Trained on South Asian hospital photos | ✔ | not stated | not stated | – |
+| Runs on a phone, offline | ✔ 90 MB | ✗ ~800 MB, too big for phones | ✗ large TensorFlow model | model only, no app |
+| Wearable tracking over time | ✔ band | – | – | – |
 
-**NEXT TESTS (BEFORE THE FINALE)**
-- Scratch model tested person by person on 83 clips from 6 volunteers
-- A one-day pilot with a volunteer with eczema: an N = 1 feasibility test on real eczema skin
+Talking point: *"The biggest models from Google score about the same as ours. They are general
+building blocks; DermEdge is a finished screening tool that also scores severity, runs on a phone
+and tracks the condition between visits, with sensor data to make it more accurate over time."*
 
-**PRIVACY**
-Photos and health data never leave the device. Encrypted, passkey-paired Bluetooth. Consent at
-setup, delete-all at any time.
+Footnote on the slide (small): *Google figures: 79 skin conditions, Google's tele-dermatology
+data (MedSigLIP model card). DermLIP: our head-to-head on SkinDisNet with the same heads.
+Different datasets, so a guide, not a contest.*
 
-## 12. Prototype / proof of concept
+## 13. Impact and future scope
 
-Screenshots: the Check tab, History, and the Home tab with the band connected (retake them in the
-new teal theme).
+**IMPACT**
+Earlier, fairer eczema checks at home, built to work on South Asian skin, and doctor visits
+informed by data from the days in between.
 
-**CURRENT STATUS**
-Working prototype: website live, band running on a breadboard.
+**FUTURE SCOPE**
+- **Sensor-trained flare model:** once doctors have labelled enough band recordings, scratching,
+  stress and temperature feed a learned model instead of a fixed rule
+- **Moisture patch** on the band, using the Southampton biomarker finding
+- **A 17 MB phone model** that copies the full model, for low-end phones (training script ready)
+- **On-device camera:** a 300 KB model on an ESP32-CAM, already trained
+- **Clinic partnerships:** share reports with a doctor, with consent, under the DPDP Act
+- A PCB band instead of the breadboard
 
-**WHAT WORKS TODAY?**
-- Website: live 3-stage check with heatmap, skin-type calibration, body-site tracking, treatment
-  log, insights, doctor report, privacy section; installable and offline
-- DermEdge band: scratch detection at 800 Hz, touch start / stop, Bluetooth pairing with the
-  website, an hour of offline buffering, alerts on its screen
-- Laptop hub with logins, storing band recordings and alerts
-- Simulated wearable days (clearly labelled) to demo how triggers drive flare risk
+Close: *"DermEdge brings private, fair eczema care home: a check in seconds, tracking in between,
+and data your doctor can act on."*
 
-**DEMO / REPOSITORY LINK**
-derm-edge.vercel.app · github.com/Lilac-dot/DermEdge
+---
 
-## 13. Impact, sustainability & next steps
+## For questions from judges (not on the slides)
 
-**HEALTHCARE & SOCIAL IMPACT**
-Earlier, fairer eczema checks at home for every skin tone, and doctor visits informed by real
-data from the days in between.
+Know these so no question catches us out:
+- **US phone photos, stage 2:** eczema vs look-alikes on SCIN is AUC 0.70. We train on both sets
+  together; a model trained on only one set doesn't transfer to the other. More labelled consumer
+  photos is the fix.
+- **The 0.87 on SkinDisNet** is 5-fold cross-validation split by photo: the dataset publishes no
+  patient IDs, so the same patient can be on both sides. Treat it as an upper bound.
+- **Healthy skin cleared** by the rash screen: 82% on SCIN. Only 107 healthy photos exist in SCIN
+  (16 of them Fitzpatrick V-VI), and none from South Asia, so false alarms on healthy brown skin
+  aren't measured yet. Test it on our own arms before the demo.
+- **Why not DermLIP if it scored 0.91?** It's a 0.016 AUC gain, its licence forbids
+  redistribution of derivatives, and switching would have meant retraining severity. Its training
+  data includes SCIN, so its SCIN scores are inflated.
+- **Market numbers** compare different datasets and tasks: MedSigLIP's 0.88 is an average over
+  79 conditions on Google's data.
+- **Severity labels** cover four EASI signs on curated photos, not a dermatologist's full EASI.
+- **Stress:** the ECG model is being retrained on WESAD's chest ECG (Tishya); the old GSR model was
+  90% accurate, 73% of stress caught, leave-one-person-out.
+- **Flare risk** is a stated rule (image score × noisy-OR of triggers), not a trained model.
 
-**MEASURING SUCCESS**
-Rash AUC of at least 0.9 on every skin type; agreement with dermatologists' severity scores;
-scratch detection on people it never trained on; fewer severe flares per user.
-
-**SUSTAINABILITY / MODEL**
-A free web app that needs no cloud servers; a low-cost band kit; clinic and teledermatology
-partnerships.
-
-**RISKS, PRIVACY & LIMITATIONS**
-A screening aid, not a diagnosis. Data stays on the device. Needs more real-world and
-darker-skin photos; the scratch model has been tested on few people; the flare score isn't
-clinically validated yet.
-
-**IMPLEMENTATION ROADMAP**
-1. Person-by-person scratch test and the volunteer pilot
-2. An on-body ECG checked against a chest strap or pulse count, then the ECG stress model on live data
-3. Dermatologist validation study, then a 2-4 week wear study
-4. Off the breadboard: a PCB band
-
-Our solution matters because it brings fair, private eczema care to every skin tone, at home.
-
-## 14. Future scope
-
-Beyond the finale build, kept so the work isn't lost:
-- **On-device camera:** a 300 KB INT8 model on an ESP32-CAM, already trained and building
-- **Personal flare model:** learn which triggers matter for each user from their own check-ins
-  (Bayesian, like EczemaPred), replacing the fixed rule
-- **Finger-only scratching:** a low-noise vibration sensor to catch what motion misses (ADAM study)
-- **A second band** for the other hand
-- **Clinic and teledermatology:** share reports with a doctor, with consent and a full DPDP Act privacy policy
-- **iPhone:** a native app, since iPhone browsers don't support Web Bluetooth
+Sources: [MedSigLIP model card](https://huggingface.co/google/medsiglip-448) ·
+[Derm Foundation](https://developers.google.com/health-ai-developer-foundations/derm-foundation) ·
+[DermLIP / Derm1M](https://github.com/SiyuanYan1/Derm1M) ·
+[SkinDisNet](https://data.mendeley.com/datasets/yj3md44hxg) ·
+[Southampton e-textile data](https://doi.org/10.5258/SOTON/D3873) · our runs:
+`experiments/encoder_comparison/summary.json`, `experiments/web_heads_v2/summary.json`.

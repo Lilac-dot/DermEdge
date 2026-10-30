@@ -4,6 +4,8 @@ Draws the system diagrams in docs/architecture/ that changed with the current pl
     python scripts/draw_architecture.py
 
   0_full_system.png          the whole system (phone/laptop camera, the DermEdge band)
+  7_old_vs_new.png           the skin model's first version vs now (31 Oct)
+  1_stage1_clip_rash_v2.png  stage 1 now; 2_stage2_clip_head_v2.png stage 2 now
   4_wearable_flare_risk.png  wearable triggers and flare risk (the band's GSR stress model)
   6_band_scratch.png         scratch detection on the band
 
@@ -106,7 +108,7 @@ def full_system():
     box(ax, 50, 187, 263, 138, "input", "Photo", "phone or laptop camera", "(website or hub)")
     box(ax, 350, 187, 250, 138, "rule", "Quality check", "blur / too dark /", "too bright")
     box(ax, 650, 187, 300, 138, "trained", "Stage 1", "Normal skin vs rash", "CLIP (frozen) + linear head")
-    box(ax, 1012, 187, 300, 138, "trained", "Stage 2", "Eczema vs 7 look-alikes", "ResNet18 + Grad-CAM")
+    box(ax, 1012, 187, 300, 138, "trained", "Stage 2", "Eczema vs look-alikes", "head on the CLIP embedding")
     box(ax, 1400, 187, 288, 138, "trained", "Stage 3", "Severity 0-12", "CLIP embedding → ridge")
     arrow(ax, (313, 256), (350, 256))
     arrow(ax, (600, 256), (650, 256))
@@ -124,16 +126,16 @@ def full_system():
     section(ax, 50, 560, "WEARABLE + JOURNAL PATH")
     box(ax, 50, 590, 330, 80, "input", "DermEdge band", "ADXL345 800 Hz, back of the hand")
     box(ax, 420, 590, 300, 80, "trained", "Scratch detector", "trained on our recordings")
-    box(ax, 50, 680, 330, 80, "input", "GSR on the band (next)", "+ skin-temp thermistor (planned)")
-    box(ax, 420, 680, 300, 80, "trained", "Stress model", "personal calm baseline")
-    box(ax, 50, 770, 330, 80, "input", "Moisture patch (maybe)", "eczema skin vs healthy skin")
+    box(ax, 50, 680, 330, 80, "input", "ECG check (AD8232)", "+ LM35 skin temperature")
+    box(ax, 420, 680, 300, 80, "trained", "Stress model", "HR / HRV vs your calm baseline")
+    box(ax, 50, 770, 330, 80, "future", "Moisture patch (future)", "eczema skin vs healthy skin")
     box(ax, 50, 860, 330, 80, "input", "Journal", "stress, sleep, new product")
     arrow(ax, (380, 630), (420, 630))
     arrow(ax, (380, 720), (420, 720))
     box(ax, 800, 675, 287, 162, "rule", "Trigger index", "noisy-OR of all triggers", "1 − Π(1 − tᵢ)")
     arrow(ax, (720, 630), (770, 630), (770, 697), (800, 697))
     arrow(ax, (720, 720), (800, 720))
-    arrow(ax, (380, 795), (800, 795))
+    arrow(ax, (380, 795), (800, 795), dashed=True)
     arrow(ax, (380, 900), (770, 900), (770, 818), (800, 818))
 
     box(ax, 1200, 700, 350, 112, "rule", "Flare risk", "= image score × trigger index")
@@ -226,7 +228,105 @@ def band():
     save(fig, "6_band_scratch.png")
 
 
+def old_vs_new():
+    fig, ax = canvas("The skin model: first version vs now",
+                     "Tested on photos it had never seen, the first stage 2 was at chance on real phone photos. "
+                     "We rebuilt it around one shared CLIP pass.")
+    section(ax, 50, 160, "FIRST VERSION (25 OCT)")
+    box(ax, 50, 185, 250, 130, "input", "Photo")
+    box(ax, 350, 185, 330, 130, "trained", "Stage 1: CLIP + rash head", "trained on US phone photos")
+    box(ax, 730, 185, 330, 130, "trained", "Stage 2: separate ResNet18", "trained on atlas photos", "+ Grad-CAM heatmap")
+    box(ax, 1110, 185, 330, 130, "trained", "Stage 3: severity head", "on the CLIP embedding")
+    box(ax, 1490, 185, 460, 130, "output", "Two models to download", "135 MB", "skin type needed a manual offset")
+    for x0, x1 in ((300, 350), (680, 730), (1060, 1110), (1440, 1490)):
+        arrow(ax, (x0, 250), (x1, 250))
+    note(ax, 50, 345, 1900, 120, "What testing on unseen photos showed",
+         "Stage 2 scored 81% on atlas photos but caught 6-10% of eczema on real phone photos · the rash screen passed",
+         "only 1 in 3 rashes from South Asian hospitals · darker skin (V-VI) caught 67% of rashes vs 84% on lighter skin")
+
+    section(ax, 50, 540, "NOW (31 OCT)")
+    box(ax, 50, 565, 250, 150, "input", "Photo", "phone or laptop")
+    box(ax, 350, 565, 300, 150, "frozen", "CLIP ViT-B/16", "one pass, 8-bit, 90 MB", "→ 512-number embedding")
+    box(ax, 740, 565, 380, 95, "trained", "Rash head", "US + South Asian photos")
+    box(ax, 740, 675, 380, 95, "trained", "Eczema vs look-alikes head", "US + South Asian photos")
+    box(ax, 740, 785, 380, 95, "trained", "Severity head", "EASI signs, 0-12")
+    arrow(ax, (300, 640), (350, 640))
+    arrow(ax, (650, 612), (740, 612))
+    arrow(ax, (650, 640), (695, 640), (695, 722), (740, 722))
+    arrow(ax, (695, 722), (695, 832), (740, 832))
+    box(ax, 1200, 565, 750, 315, "output", "Results",
+        "One model to download, 90 MB, phone and laptop",
+        "South Asian rashes caught: 33% → 84%",
+        "Eczema vs look-alikes on South Asian photos: AUC 0.87",
+        "Darker skin (V-VI): 86% of rashes caught, no offset needed",
+        "Occlusion heatmap on laptops",
+        "Same heads run on any device")
+    arrow(ax, (1120, 722), (1200, 722))
+    legend(ax)
+    save(fig, "7_old_vs_new.png")
+
+
+def stage1_v2():
+    fig, ax = canvas("Stage 1: is there a rash?",
+                     "One frozen CLIP pass gives a 512-number embedding; a trained head turns it into P(rash).")
+    box(ax, 50, 200, 250, 140, "input", "Photo", "centre crop 224 px")
+    box(ax, 340, 200, 250, 140, "rule", "Quality check", "blur · too dark ·", "too bright → retake")
+    box(ax, 630, 200, 300, 140, "frozen", "CLIP ViT-B/16", "image encoder", "8-bit weights, in the browser")
+    box(ax, 970, 200, 260, 140, "input", "Embedding", "512 numbers")
+    box(ax, 1270, 140, 330, 120, "rule", "Skin check", "CLIP text prompts:", "is this skin at all?")
+    box(ax, 1270, 290, 330, 120, "trained", "Rash head", "logistic regression", "(TRAINED)")
+    box(ax, 1650, 290, 300, 120, "output", "P(rash)", "≥ 0.5 → stage 2")
+    for x0, x1 in ((300, 340), (590, 630), (930, 970)):
+        arrow(ax, (x0, 270), (x1, 270))
+    arrow(ax, (1230, 250), (1250, 250), (1250, 200), (1270, 200))
+    arrow(ax, (1230, 290), (1250, 290), (1250, 350), (1270, 350))
+    arrow(ax, (1600, 350), (1650, 350))
+    note(ax, 50, 480, 920, 260, "Trained on",
+         "SCIN: 1,849 real US phone photos (rashes + healthy skin)",
+         "SkinDisNet: 1,710 photos from 2 hospitals in Bangladesh",
+         "Started from our first head and pulled back toward it,",
+         "so it keeps what it learned from earlier photo sets")
+    note(ax, 1030, 480, 920, 260, "Results (5-fold cross-validation, unseen people)",
+         "AUC 0.92 on real phone photos · 88% of rashes caught",
+         "South Asian hospital rashes caught: 84% (was 33%)",
+         "Darker skin (Fitzpatrick V-VI): 86% caught, AUC 0.95,",
+         "the same as lighter skin, with no extra calibration")
+    legend(ax)
+    save(fig, "1_stage1_clip_rash_v2.png")
+
+
+def stage2_v2():
+    fig, ax = canvas("Stage 2: eczema or a look-alike?",
+                     "A second trained head on the same CLIP embedding: no second model to download.")
+    box(ax, 50, 200, 280, 140, "input", "Embedding", "from stage 1's CLIP pass")
+    box(ax, 380, 200, 360, 140, "trained", "Eczema head", "logistic regression (TRAINED)", "each dataset weighted equally")
+    box(ax, 790, 200, 300, 140, "output", "P(eczema)", "≥ 0.5 → severity", "< 0.5 → see a doctor")
+    arrow(ax, (330, 270), (380, 270))
+    arrow(ax, (740, 270), (790, 270))
+    box(ax, 1150, 200, 380, 140, "rule", "Occlusion heatmap", "cover each of 16 squares,", "see how far P(eczema) moves")
+    box(ax, 1580, 200, 370, 140, "output", "Heatmap", "what the decision rested on", "(laptops with a fast GPU)")
+    arrow(ax, (1090, 270), (1150, 270))
+    arrow(ax, (1530, 270), (1580, 270))
+    note(ax, 50, 420, 920, 300, "Look-alikes it separates eczema from",
+         "Psoriasis · tinea (ringworm) · scabies · candidiasis",
+         "insect bites · lichen planus · drug rash · rosacea",
+         "",
+         "Trained on SCIN (US phone photos) + SkinDisNet",
+         "(atopic dermatitis and eczema vs scabies and tinea)")
+    note(ax, 1030, 420, 920, 300, "Results on South Asian hospital photos",
+         "AUC 0.87 (5-fold cross-validation)",
+         "78% of eczema caught · 81% of look-alikes cleared",
+         "Encoder head-to-head, same heads and photos:",
+         "CLIP 0.89 · DermLIP 0.91 · DermLIP-PanDerm 0.89",
+         "→ on par with dermatology foundation models")
+    legend(ax)
+    save(fig, "2_stage2_clip_head_v2.png")
+
+
 if __name__ == "__main__":
     full_system()
     wearable()
     band()
+    old_vs_new()
+    stage1_v2()
+    stage2_v2()

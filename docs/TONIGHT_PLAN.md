@@ -8,7 +8,7 @@ on WebAssembly, load stage 2 after stage 1, retry a failed load, and keep error 
 | Tier | Runs on | Model | Size | Status |
 |---|---|---|---|---|
 | Laptop | Browser, WebGPU | CLIP ViT-B/16 (or DermLIP if it wins) + ResNet18 stage 2 | ~90 + 45 MB | live |
-| Phone | Browser, WebAssembly | MobileNetV3 trained to copy the CLIP embedding, so every existing head works on it | ~17 MB | **Shreeya, Colab** |
+| Phone | Browser, WebAssembly | the same CLIP model (loads on phones since the 31 Oct fix); a 17 MB copy is future scope | ~90 MB | live |
 | ESP32-CAM | On the board | MobileNetV1-0.25 int8, rash vs no rash | 300 KB | exists, untested on a board; slide only |
 
 The website picks the tier itself (phone or laptop, WebGPU or not), with a Settings switch to use
@@ -20,25 +20,12 @@ stages and the skin-type check. Switch only if it ties or wins.
 
 ## Who does what
 
-### Shreeya: phone model on Colab (about 1 hour, mostly waiting)
-1. colab.research.google.com > New notebook > Runtime > Change runtime type > **T4 GPU**.
-2. Run in one cell:
-   ```
-   !git clone https://github.com/Lilac-dot/DermEdge.git
-   %cd DermEdge
-   !pip -q install timm onnx onnxruntime transformers
-   !python scripts/train_phone_student.py --download-scin --out /content/student
-   ```
-   It downloads about 10,000 SCIN photos (public, no login, ~5 min), trains for 25 epochs and
-   prints `held-out cos` after each one (how closely it copies the laptop model; closer to 1 is better).
-3. At the end it prints a summary. The numbers that matter are under `through_website_heads`:
-   `rash_decision_agreement` (how often the phone model makes the same rash call as the laptop
-   model; aim for 0.9+) and `severity_mean_abs_diff_points`.
-4. Download `/content/student/phone_vision.onnx` and `/content/student/summary.json` (Files
-   panel on the left > right-click > Download) and send both to Nitish.
-5. If Colab disconnects, rerun the last line: photos already downloaded are kept for that session.
-
-Then the PPT.
+### Shreeya: the PPT
+The phone model is **dropped for the finale**: the full model now loads on phones (WebAssembly),
+so `scripts/train_phone_student.py` stays as future scope. Don't run the Colab steps.
+Rebuild the Canva deck from [PITCH_DECK.md](PITCH_DECK.md) (rewritten 31 Oct: 10-minute timing,
+demo video plan, new diagrams in `docs/architecture/`: `7_old_vs_new.png`,
+`1_stage1_clip_rash_v2.png`, `2_stage2_clip_head_v2.png`, and the redrawn `0_full_system.png`).
 
 ### Tishya: sensors, plus one upload
 The heads were trained on files that were never committed. Zip these from your DermEdge folder
@@ -54,14 +41,13 @@ If `SkinDisease/` is too big, the CSVs alone are enough; the images also come fr
 
 ### Nitish (with Claude on the laptop)
 - DermLIP vs CLIP comparison, then switch if it wins.
-- Tier switching in `web/js/engine.mjs`; plug in Shreeya's `phone_vision.onnx`.
+- Website: accept and chart the band's ECG / heart-rate and LM35 readings, needed for demo video part B.
 - Test on a real Android phone and an iPhone, then deploy.
 - PPT with Shreeya.
 
 ## Rough timings
 | Step | Time |
 |---|---|
-| Phone model training on Colab | ~1 h |
 | DermLIP comparison, once the data is here | 1.5–2 h |
 | Switching to DermLIP if it wins (browser export, checks, skin-type offsets) | +1.5 h |
 | Tier switching + phone model in the website + phone tests | ~1.5 h |

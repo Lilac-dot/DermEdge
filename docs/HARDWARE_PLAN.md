@@ -13,6 +13,7 @@ Newest first. Each decision is reflected in the sections below.
 
 | Date | Decision | Why |
 |---|---|---|
+| 31 Oct 2026 | **The scratch model is retrained on all 7 people's recordings, with all features** (motion and vibration), replacing the one-wearer motion model (reverses 25 Oct), **and its rhythm range now starts at 1.8 strokes a second** instead of 2.5. | Tested leave-one-person-out on 99 clips from 7 people, all features found 20 of 26 scratch clips (motion only: 18), balanced accuracy 0.70 (0.67). The misses were slow scratchers (P06, P07 at 1-2 strokes a second); from 1.8 it found 22 of 26 with 14 false episodes, 0.76. The one-wearer test's 4 of 4 with no false episodes overstated how it does on someone new. |
 | 31 Oct 2026 | **ECG electrodes on both wrists (Lead I), read as a seated 1-2 minute stress check, not all day.** The module is an **AD8232**. Pins moved: OUTPUT to GPIO 32, LO+ to 33, LO− to 34, SDN tied to 3V3 (Tishya). | One wrist can't record ECG; both wrists is standard Lead I, and HR/HRV only need beat timing, which Lead I gives (an Apple Watch's Lead I matched a 3-lead reference within 1.15% for beat timing at rest). Movement and arm-muscle noise rule out continuous wear. Our ESP32 board doesn't break out GPIO 36/39. |
 | 31 Oct 2026 | **The lesion-vs-healthy temperature pair is dropped**, not just future scope. One LM35 on the wrist, on GPIO 35. | The research on lesion temperature is thin and points both ways (inflamed skin runs warmer; atopic skin also shows vasoconstriction), matching the dermatologists' advice, and no dataset links it to flares. |
 | 31 Oct 2026 | **The skin model runs in device tiers** ([TONIGHT_PLAN.md](TONIGHT_PLAN.md)): laptops keep CLIP ViT-B/16 + ResNet18 on WebGPU; phones get a ~17 MB MobileNetV3 trained on SCIN to copy CLIP's embedding, so every existing head works on it unchanged (Shreeya, Colab); the ESP32-CAM's 300 KB model stays a future-scope slide. The website picks the tier itself, with a Settings switch for the full model on a strong phone. **DermLIP** (ViT-B/16 and PanDerm-base) gets the same heads on the same data and replaces CLIP only if it ties or wins on held-out photos for all three stages and the skin-type check (Nitish). | Phones were slow or failed to load the 90 MB CLIP model. Copying the embedding avoids relabelling and retraining every head; switching to DermLIP only on a tie or win keeps the published results valid. |
@@ -155,7 +156,7 @@ dermatologists told us skin temperature is too variable for that.
 ## 6. Scratch detection
 
 **How it works:** the ADXL345 samples at 800 Hz. Every second the detector turns the last 2 s
-of motion and 1 s of vibration into features (motion strength and rhythm at 2.5-8 strokes a
+of motion and 1 s of vibration into features (motion strength and rhythm at 1.8-8 strokes a
 second, band powers from 2 to 400 Hz, and whether the 80-400 Hz vibration pulses in the stroke
 rhythm), and a small logistic model trained on recordings scores them. Two scratchy seconds
 start an episode; four calm ones end it.
@@ -164,17 +165,49 @@ The vibration features follow the ADAM sensor study (Chun et al., *Sci. Adv.* 7,
 scratching makes a skin vibration that a 100 Hz smartwatch can't see, which is why one mistook
 waving for scratching and missed finger-only scratching.
 
+**Results across people (31 Oct 2026):** 7 people recorded the `tools/record.py session` (8
+activities × 20 s, twice; 99 clips after dropping one mislabelled clip). Each person is tested
+with a model trained on the other six, the honest number for someone new:
+
+| Model (31 Oct, 7 people, 99 clips) | Scratch clips found | False episodes in 73 other clips | Balanced accuracy (per second) |
+|---|---|---|---|
+| Hand-set rule (fallback, rhythm from 2.5 strokes/s) | – | – | 0.60 (flags 89% of waving) |
+| Motion features only | 18 of 26 | 13 | 0.67 |
+| Vibration features only | – | – | 0.54 |
+| All features, rhythm from 2.5 strokes/s | 20 of 26 | 15 | 0.70 |
+| **All features, rhythm from 1.8 strokes/s (on the band now, trained on all 7)** | **22 of 26** | **14** | **0.76** |
+
+The range and the model were picked on these same 7 people, so 0.76 is a little optimistic for
+someone new. Per person, on the band's model:
+
+| Person | Scratch clips found | False episodes |
+|---|---|---|
+| P01 | 4 of 4 | 1 |
+| P02 | 1 of 2 (two of P02's scratch clips recorded empty) | 0 |
+| P03 | 4 of 4 | 4 |
+| P04 | 4 of 4 | 3 |
+| P05 | 4 of 4 | 2 |
+| P06 | 2 of 4 | 2 |
+| P07 | 3 of 4 (1 of 4 with the 2.5 range) | 2 |
+
+So it catches most scratching for most people, still misses some slow or irregular scratching
+(P06), and raises false episodes on rubbing, typing and waving for others (P03, P04). P07 is the
+only left-hand and the only male recording; the features don't depend on which hand the board is
+on, and his misses were explained by slow strokes. The deployed model is trained on all
+7, so it should do a little better than these held-out numbers on a new person, but that's not
+measured until the volunteer day.
+
 **First results (25 Oct 2026, one wearer, board on the back of the hand):** 16 clips of 20 s,
 8 activities recorded twice with `tools/record.py session`; trained on one round, tested on the
-other with `tools/tune.py`.
+other with `tools/tune.py`. These overstated it: see above.
 
 | | Scratch clips found | False episodes in the 12 other clips | Waving |
 |---|---|---|---|
 | Hand-set rule (before training) | 3 of 4 | 3 (waving twice, typing once) | flagged every second |
 | Vibration features only | | | chance level (balanced accuracy 0.51) |
-| **Motion features (on the band now)** | **4 of 4, one episode each** | **0** | **0%** |
+| Motion features | 4 of 4, one episode each | 0 | 0% |
 
-- Vibration didn't help on this hardware: at 800 Hz the ADXL345's noise floor (14-22 mg RMS,
+- For one wearer, vibration didn't help: at 800 Hz the ADXL345's noise floor (14-22 mg RMS,
   flat across frequencies) hides it, and the vibration envelope never pulsed in the stroke rhythm
   (autocorrelation at most 0.30). ADAM used a low-noise sensor pressed to the skin.
 - What separates scratching here is the motion pattern: where its energy sits (2-5 vs 5-20 Hz),
@@ -185,13 +218,11 @@ other with `tools/tune.py`.
 - The threshold (0.7) and episode ending (4 calm seconds) were picked on the same held-out round
   they were scored on, so these numbers are optimistic.
 
-**Limits to keep in mind:** one wearer's recordings make a personal model, not a validated one.
-ADAM tested on held-out people for that reason. Night-time is the easy case, with few lookalike
-activities.
+**Limits to keep in mind:** 7 healthy people acting out scratching in 20 s clips isn't real
+eczema scratching at night. Night-time is the easier case, with few lookalike activities.
 
 **Validation plan:**
-1. All three of us record the `tools/record.py` session, so the model can be tested
-   leave-one-person-out (train on two, test on the third), not only on a held-out round.
+1. ~~Record more people for a leave-one-person-out test~~: done, 7 people (31 Oct, above).
 2. Augment the training recordings only: small axis rotations (the board sits at a slightly
    different angle), ±10% scaling, added noise at the ADXL345's measured level, and slight time
    stretching. Never augment the test data.

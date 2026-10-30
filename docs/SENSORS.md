@@ -49,17 +49,20 @@ links wearable readings to eczema flares (see the research summary at the end).
 
 ## ADXL345 accelerometer: scratching
 
-- **Job:** detects scratching from hand motion (strength, rhythm at 2.5-8 strokes per second, and
+- **Job:** detects scratching from hand motion (strength, rhythm at 1.8-8 strokes per second, and
   where the energy sits in frequency). Also tells the ECG check whether you're still.
 - **Wiring:** VCC 3V3, GND, SDA 21, SCL 22, **CS to 3V3** (I2C mode) and **SDO to GND** (address
   0x53); without those two it drops off the bus.
 - **Specs:** 3 axes, ±2 to ±16 g, up to 3200 samples a second. We run it at 800 Hz.
 - **Placement:** on the back of the hand you scratch with, flat and snug.
-- **Our measurements (25 Oct, one wearer):** 16 clips of 20 s, 8 activities, trained on one round
-  and tested on the other. The motion model found **4 of 4 scratch clips** with **0 false
-  episodes** in the 12 other clips (waving, typing and so on). The band's C code and the Python
-  model agree on all 284 windows. The ADXL345's noise at 800 Hz (14-22 mg) buried the skin
-  vibration, so vibration features don't help on this part.
+- **Our measurements (31 Oct, 7 people, 99 clips of 20 s, 8 activities each):** each person
+  tested with a model that never saw them found **22 of 26 scratch clips**, with **14 false
+  episodes in 73 non-scratch clips** (mostly rubbing, typing, waving); balanced accuracy 0.76 per
+  second. It varies by person: 4 of 4 for four people, 2 of 4 for one. Lowering the slowest
+  stroke rate it looks for from 2.5 to 1.8 a second caught slow scratchers (before: 20 of 26,
+  0.70); that was chosen on these same people, so it's a little optimistic. The band now runs
+  this model trained on all 7. (An earlier one-wearer test, 4 of 4 with no false episodes,
+  overstated it.)
 - **Research, for:** wrist-worn accelerometers measure night-time scratching well: total scratch
   duration agreed with video at r = 0.82 (Mahadevan et al. 2021, N = 25), and smartwatch scratch
   metrics tracked eczema severity in 50 children (r = 0.60-0.64, Iwai et al. 2026). A hand-mounted
@@ -68,8 +71,9 @@ links wearable readings to eczema flares (see the research summary at the end).
   scratching (Yang et al. 2021 systematic review; the back-of-hand placement is our answer to
   that). Models from few people are fragile: a 7-person wrist model reached F1 0.45 (Xing et al.
   2024).
-- **Status:** ✅ working, with a trained model on the band. **Limit:** one wearer so far; all three
-  of us record next for a leave-one-person-out test, then the volunteer day.
+- **Status:** ✅ working, with a model trained on 7 people. **Limit:** moderate accuracy on new
+  people, and acted scratching by healthy people, not eczema at night; the volunteer day is the
+  real test.
 
 ## ST7735 TFT screen
 
@@ -189,7 +193,7 @@ links wearable readings to eczema flares (see the research summary at the end).
 
 | Part | Feasible? | Evidence |
 |---|---|---|
-| Scratch detection (ADXL345) | Yes | **Strong.** Wrist and hand sensors agree with video |
+| Scratch detection (ADXL345) | Yes | **Strong in the literature** (wrist and hand sensors agree with video); **moderate on our band** (22 of 26 scratch clips on new people) |
 | ECG stress check (AD8232, Lead I) | Yes, seated | **Moderate.** Heart rate is robust, HRV more fragile, and eczema itself shifts HRV |
 | Wrist temperature (LM35) | Yes | **Weak** as a stress input, so it's one feature among several |
 | Stress as an eczema trigger | – | **Plausible but not proven.** Big disruptions worsen eczema (after the 1995 Hanshin earthquake, 38% of patients in the worst-hit area worsened against 7% elsewhere: Kodama et al. 1999), but most studies are retrospective (Picardi & Abeni 2001), and a meta-analysis found a very small pooled effect, mostly from asthma studies (Chida et al. 2008) |

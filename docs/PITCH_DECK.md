@@ -167,7 +167,7 @@ Visual: three steps, left to right: **Collect → Doctor validates → Model aut
 | Darkest skin types (Fitzpatrick V-VI) | **86% caught, AUC 0.95**, the same as lighter skin | SCIN, by skin type |
 | Eczema vs look-alikes (stage 2) | **AUC 0.87**; 78% of eczema caught, 81% of look-alikes cleared | South Asian hospital photos, 5-fold cross-validation |
 | Severity (stage 3) | **97.6%** within one band; mean error 1.2 / 12 | Held-out validation set |
-| Scratch detection | 4 of 4 scratch clips, 0 false alarms in 12 others | One wearer, held-out round |
+| Scratch detection | 22 of 26 scratch clips, 14 false alarms in 73 others | 7 people, each tested by a model that never saw them |
 | Skin barrier biomarker | Eczema skin drier in **13 of 13** patients | Southampton e-textile study |
 
 ## 12. DermEdge vs the market

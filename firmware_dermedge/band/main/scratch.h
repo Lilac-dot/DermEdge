@@ -2,14 +2,14 @@
 // ESP-IDF, so the host tests in test/ and the tuning tools in tools/ run the same code.
 //
 // Scratching has two parts (Chun et al., Sci. Adv. 7, eabf9405, 2021, the ADAM sensor):
-//   motion     the hand's back-and-forth, 2.5-8 strokes a second. Waving looks the same.
+//   motion     the hand's back-and-forth, 1.8-8 strokes a second. Waving looks the same.
 //   vibration  nails or fingertips rubbing skin, 80-400 Hz. Waving has none; finger-only
 //              scratching has little motion but plenty of vibration.
 // Every second, the last 2 s of motion and 1 s of vibration become a feature vector:
 //   rms        motion RMS with gravity removed (decimated to 100 Hz)
-//   rhythm     autocorrelation peak of the most active axis at 2.5-8 Hz
+//   rhythm     autocorrelation peak of the most active axis at 1.8-8 Hz
 //   band[0..6] log10 power in 2-5, 5-20, 20-50, 50-80, 80-140, 140-250, 250-400 Hz (all axes)
-//   vib_rhythm autocorrelation peak of the 80-400 Hz envelope at 2.5-8 Hz (strokes in the vibration)
+//   vib_rhythm autocorrelation peak of the 80-400 Hz envelope at 1.8-8 Hz (strokes in the vibration)
 //   vib_ratio  80-400 Hz power over 2-400 Hz power
 // A logistic model trained on recordings (scratch_model.h, from tools/tune.py) scores it; until
 // one is trained, a hand-set rule does: enough vibration, pulsing or moving in the stroke rhythm.
@@ -27,7 +27,12 @@
 #define SCRATCH_HOP 800             // a decision every second
 #define SCRATCH_RMS_MAX 1.5f        // above this it's a jolt or a fall, not scratching
 #define SCRATCH_LAG_MIN 12          // 8.3 Hz at 100 Hz
-#define SCRATCH_LAG_MAX 40          // 2.5 Hz
+// 1.8 Hz: slow scratchers (1.8-2.5 strokes a second) were missed at 2.5 Hz (lag 40); the 7-person
+// test went from balanced accuracy 0.70 to 0.76. The band and tools/tune.py both use this. The
+// hand-set rule can't tell walking from slow scratching, so its host tests build with 40.
+#ifndef SCRATCH_LAG_MAX
+#define SCRATCH_LAG_MAX 55
+#endif
 #define SCRATCH_START_WINDOWS 2     // scratchy seconds in a row that start an episode
 #define SCRATCH_END_WINDOWS 2       // calm seconds in a row that end it
 #define SCRATCH_N_BANDS 7

@@ -116,7 +116,7 @@ off doesn't warn: the heart check is a few minutes, and they're meant to come of
 
 Wear the add-on board on the **back of the hand** you scratch with. The ADXL345 samples at
 800 Hz; a sensor task drains its FIFO every 10 ms and a detector task (`main/scratch.c`) turns
-each second into features: motion strength and rhythm (2.5-8 strokes a second, at 100 Hz after
+each second into features: motion strength and rhythm (1.8-8 strokes a second, at 100 Hz after
 decimation), band powers from 2 to 400 Hz, and whether the 80-400 Hz vibration pulses in the
 stroke rhythm. A logistic model in `main/scratch_model.h` scores them (threshold 0.7); two
 scratchy seconds start an episode and four calm ones end it.
@@ -127,14 +127,16 @@ Training it on your own recordings:
 python3 tools/record.py check      # 10 s still: sample rate, dropouts, noise floor
 python3 tools/record.py session    # 8 activities x 20 s, twice, into ~/DermEdge-recordings (not git)
 python3 tools/tune.py              # held-out results: rule vs motion vs vibration vs all features
-python3 tools/tune.py --write      # train on everything, write main/scratch_model.h, then rebuild
+python3 tools/tune.py --features "all features" --write   # train on everything, write main/scratch_model.h, rebuild
 ```
 
 `tools/replay.c` runs the band's own detector over a recording, so training uses exactly the
-band's features. The first model (one wearer, 16 clips) found every scratch clip with no false
-episodes on the held-out round, using motion features only: the ADXL345's noise at 800 Hz
-(14-22 mg) buries the skin vibration the ADAM study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021)
-relies on. Results and limits: `docs/HARDWARE_PLAN.md` section 6. The host tests check the
+band's features. The model on the band is trained on 7 people (99 clips) with all features.
+Tested on each person with a model that never saw them, it found 22 of 26 scratch clips with 14
+false episodes in 73 other clips (balanced accuracy 0.76). Rhythm counts from 1.8 strokes a
+second: from 2.5, slow scratchers were missed (20 of 26, 0.70). The ADXL345's noise at 800 Hz (14-22 mg) mostly buries the skin vibration
+the ADAM study (Chun et al., *Sci. Adv.* 7, eabf9405, 2021) relies on, but it still helped a little
+across people. Results and limits: `docs/HARDWARE_PLAN.md` section 6. The host tests check the
 detector's logic with the hand-set rule (`-DSCRATCH_FORCE_RULE`), including that waving is
 rejected and fingertip-only scratching caught.
 

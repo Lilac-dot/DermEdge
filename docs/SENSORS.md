@@ -4,7 +4,7 @@ Every part on the band as of 31 Oct 2026: what it does for DermEdge, how it's wi
 datasheet promises, what we've measured ourselves, and what the research says for and against
 using it this way. Decisions and the full pin map are in [HARDWARE_PLAN.md](HARDWARE_PLAN.md).
 
-**Status key:** ✅ checked on our board · 🟡 partly checked · ⬜ not checked yet
+**Status key:** ✅ checked on our board · 🟡 partly checked · ⚠️ readings not trustworthy yet · ⬜ not checked yet
 
 ## At a glance
 
@@ -15,7 +15,7 @@ using it this way. Decisions and the full pin map are in [HARDWARE_PLAN.md](HARD
 | 1.8" ST7735 TFT | Screen | 23, 18, 5, 16, 4 (SPI) | **5V** | ✅ |
 | 4-pad capacitive touch module | Navigation | 27 (OUT1) | 3V3 | ✅ |
 | AD8232 ECG module | Stress, from heart rate and HRV | 32 (OUTPUT), 33 (LO+), 34 (LO−) | 3V3 | 🟡 |
-| LM35 temperature sensor | Wrist skin temperature, for the stress model | 35 | **5V** | 🟡 |
+| LM35 temperature sensor | Wrist skin temperature, for the stress model | 35 | **5V** | ⚠️ |
 
 All grounds are shared. Analog sensors use **ADC1** pins only (32-39), because ADC2 stops working
 while Bluetooth is on.
@@ -107,9 +107,11 @@ links wearable readings to eczema flares (see the research summary at the end).
   goes high when an electrode is off. The trace is good for beat timing, not for diagnosis; it
   is not a medical device.
 - **Our measurements (31 Oct):** 🟡 the ESP32 samples it at ~245 per second (target 250), and the
-  lead-off pins correctly reported "off" with no electrodes attached. **Not yet done:** an
-  on-body trace, and a heart-rate check against a reference (a chest strap, or a 60-second pulse
-  count).
+  lead-off pins correctly reported "off" with no electrodes attached. The band firmware's beat
+  detector and HRV maths pass host tests on a synthetic ECG with T waves, baseline wander and
+  120 mV of noise (68 and 92 bpm found within 1 bpm; RMSSD drops from about 52 to 10 ms under
+  simulated stress; a hand-worked window matches to 0.05 ms). **Not yet done:** an on-body trace,
+  and a heart-rate check against a reference (a chest strap, or a 60-second pulse count).
 - **Research, for:**
   - Lead I is enough for beat timing: an Apple Watch's Lead I ECG matched a 3-lead reference
     within 1.15% for beat-to-beat intervals and heart rate at rest (Bonneval et al. 2025).
@@ -146,21 +148,25 @@ links wearable readings to eczema flares (see the research summary at the end).
 - **Placement:** under the band against the inside of the wrist, on a lead away from the ESP32's
   own heat. The TO-92 package touches skin poorly and reacts slowly: thermal paste or a small
   copper disc on the flat face helps; let it settle a minute.
-- **Our measurements (31 Oct):** 🟡 steady at 34.8-35.5 °C over 15 s (averaged once a second from
-  250 reads). Still to do: an air-vs-skin check against a reference thermometer.
+- **Our measurements (31 Oct):** ⚠️ not trustworthy yet. Three runs on the same afternoon read
+  34.8-35.5 °C, then about 63 °C, then about 8 °C, each steady within itself. That pattern means
+  GPIO 35 isn't seeing a properly connected LM35 (a loose middle leg, the part in backwards, or a
+  different TO-92 part). The firmware rejects readings outside 10-50 °C, so the 63 and 8 °C runs
+  were never sent. To do: check the wiring and the part's marking, then an air-vs-skin check
+  against a reference thermometer.
 - **Research, for:** stress lowers skin temperature at distal sites such as the fingers (Vinkers et
   al. 2013); in WESAD it dropped under stress in 12 of 15 people. Heat and sweating are
   established itch triggers (Murota et al. 2017), so a rise is also worth showing.
 - **Research, against:** the effect depends on body site (none at proximal sites) and sex
   (Vinkers et al. 2013), and the wrist sits in between, so expect small changes. Going outside or
   into air conditioning moves skin temperature too.
-- **Status:** 🟡 reads plausibly; reference check next.
+- **Status:** ⚠️ wiring to check before any reading counts.
 
 ## Dropped sensors
 
 | Sensor | Dropped | Why |
 |---|---|---|
-| GSR (skin conductance) | 31 Oct | Replaced by ECG. The band firmware's GSR and thermistor code (`skin_adc.c`) is being replaced |
+| GSR (skin conductance) | 31 Oct | Replaced by ECG, in the band firmware and on the website (31 Oct) |
 | Skin moisture patch | 31 Oct | Dropped with GSR |
 | NTC thermistor | 31 Oct | Replaced by the LM35 |
 | Second LM35 (lesion vs healthy) | 31 Oct | Thin, conflicting evidence; no data linking it to flares |

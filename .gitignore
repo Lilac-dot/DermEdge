@@ -24,6 +24,9 @@ firmware_dermedge/*/managed_components/
 firmware_dermedge/*/dependencies.lock
 firmware_dermedge/*/sdkconfig
 firmware_dermedge/*/sdkconfig.old
+firmware_dermedge/bringup/*/build/
+firmware_dermedge/bringup/*/sdkconfig
+firmware_dermedge/bringup/*/sdkconfig.old
 firmware_dermedge/*/.cache/
 archive/*/build/
 archive/*/sdkconfig

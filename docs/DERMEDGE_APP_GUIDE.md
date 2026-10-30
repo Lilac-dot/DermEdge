@@ -64,32 +64,34 @@ DermEdge band (ESP32)  ──Bluetooth LE, encrypted──►  App / website  �
 - `t` is seconds since the band started that recording. Batch a few, drop `r`, and
   `POST /api/band/sessions/{id}/readings`. For accurate times when the hub session started later
   than the band (offline recording), send `ts = now - (status.el - t)` instead of `t`.
-- The band keeps readings in its **flash** while disconnected: about **20 hours** with the GSR on,
+- The band keeps readings in its **flash** while disconnected: about **35 hours** of recording,
   and they survive a restart or a flat battery. It sends them, oldest first, when the link comes
   back (status `"s":"syncing"`, `q` counting down; a long backlog takes a while over Bluetooth).
   Recording numbers `r` keep counting across restarts, so they stay unique. When the flash fills,
   the band keeps the oldest data and thins the new: from 90% full, motion summaries every 10 s
   only; from 98%, scratch episodes only.
-- **Sensor readings** (GSR, skin temperature, moisture). The website already relays, stores and
-  charts these. Same `r` and `t` as above, and a message may carry several items. What the band's
-  firmware sends (checked against the website's code, 26 Oct):
+- **Sensor readings** (changed 31 Oct: **ECG replaces GSR**, an **LM35** replaces the thermistor,
+  moisture is dropped). Same `r` and `t` as above. What the band's firmware sends:
   ```
-  {"r":3,"gsr":[{"t":12.00,"microsiemens":1.84},{"t":12.25,...},{"t":12.50,...},{"t":12.75,...}]}
-                                                              4 Hz, four to a message (~145 bytes)
+  {"r":3,"hrv":[{"t":30.0,"hr":71.8,"rmssd":42.5,"sdnn":51.0,"beats":36}]}
+                    one per 30 s of ECG electrode contact with the hand still; t = window start
   {"r":3,"skin_temp":[{"t":12.0,"c":32.4}]}                   every 5 s, a 5 s average, 10-50 C
-  {"r":3,"moisture":[{"t":12.0,"patch":47.1,"reference":50.2}]}  eczema patch, healthy skin
   ```
-  GSR should be sampled at **4 Hz** (the E4's rate the stress model was trained at), in
-  microsiemens. The website scores stress from it with `web/models/stress_gsr.json`
-  (`scripts/train_gsr_stress.py`): each 30 s window against the wearer's first 90 s of the
-  recording, so the wearer sits still for that part. Skin temperature is shown and stored but
-  not used for stress: in the WESAD test it drifted with time on the wrist and made stress
-  detection worse. `temperatures` (`lesion_c`) is also accepted and treated as skin temperature.
-  The band **sends nothing** while the electrodes are off the skin, the GSR module or the
-  thermistor is unplugged, or the thermistor hasn't read steadily for 3 s yet, so a gap in the
-  readings means "no data", never zeros.
-- The hub (`app/band.py`) accepts `gsr` and `moisture` already; it has no `skin_temp` field yet
-  (its `temperatures` table was built for the lesion-vs-healthy pair, now future scope).
+  `hr` is beats per minute; `rmssd` and `sdnn` are heart rate variability in ms (lower under
+  stress); `beats` is how many clean beat intervals the window used. The band sends an `hrv`
+  reading only when the window is usable (still hand, at least 15 clean beats, under 20%
+  artifacts) and skin temperature only once the LM35 reads steadily, so a gap means "no data",
+  never zeros. The electrodes go on both wrists for a seated 1-2 minute check, so expect a few
+  `hrv` readings per check, not a continuous stream.
+- **How the website uses them** (`web/js/local-api.js`): the first 3 `hrv` readings of a
+  recording are the wearer's calm level; later ones are shown against it ("+12 bpm vs your calm
+  level"). **Stress is scored once a model exists** at `web/models/stress_ecg.json`, in the same
+  format as `stress_gsr.json` (`features`, `mean`, `scale`, `coef`, `intercept`), with feature names
+  `<name>_rel` taken relative to the calm level from `HR_mean`, `RMSSD`, `SDNN` and `TEMP_mean`.
+  When it's there, the trigger "stress (band ECG)" joins the flare index; until then heart rate
+  and HRV are shown but not scored. The website still accepts `gsr`, `moisture` and
+  `temperatures` from older firmware.
+- The hub (`app/band.py`) doesn't store `hrv` or `skin_temp` yet; the browser version does.
 
 ### 5. Flare alerts
 - A readings upload can return `"alert": {id, level, risk, reasons, tips}`; the hub raises at most
@@ -117,9 +119,10 @@ count:
 | `act` | movement in the last second, g (about 0-0.6) |
 | `q` | readings waiting to be sent |
 | `alert` | 1 while an alert shows on the band |
-| `gsr` | live skin conductance in µS, `null` while off skin or unplugged |
+| `ecg` | 1 while the ECG electrodes are on |
+| `hr` | live heart rate in bpm, `null` until a few clean beats are found |
 | `tc` | live skin temperature in °C, `null` while unplugged or settling |
-| `sim` | 1 while the band's skin readings are **simulated** (testing without sensors): label them so |
+| `sim` | 1 while the band's heart and temperature readings are **simulated** (testing without sensors): label them so |
 
 ### 7. History
 - `GET /api/band/sessions`: every session with `duration_s` and `scratch_count`.
@@ -160,7 +163,7 @@ session already stopped), 422 (bad input).
 | `POST /api/band/sessions/start` | `{device_id, label, started_by, notes}` | session |
 | `POST /api/band/sessions/{id}/stop` | | session |
 | `GET /api/band/sessions`, `GET /api/band/sessions/{id}` | | sessions / session with readings |
-| `POST /api/band/sessions/{id}/readings` | `{scratch_events, motion, temperatures, gsr, moisture}` | `{stored, alert}` |
+| `POST /api/band/sessions/{id}/readings` | `{scratch_events, motion, hrv, skin_temp}` (also `gsr`, `moisture`, `temperatures` from older firmware) | `{stored, alert}` |
 | `POST /api/band/sessions/{id}/raw` | `{label, fs, samples}` | `{id, n}` |
 | `GET /api/band/alerts`, `POST /api/band/alerts/{id}/dismiss` | | |
 
@@ -184,10 +187,9 @@ screens are in `firmware_dermedge/band/test/preview.png`.
   yet. Research (the ADAM sensor study: Chun et al., *Sci. Adv.* 7, eabf9405, 2021) shows the clearest scratch
   signal is a 100-800 Hz skin vibration, which this misses, including finger-only scratching.
   Planned: sample faster (the ADXL345 goes to 3200 Hz) and move the sensor to the back of the hand.
-- **Sensors still to add:** GSR and one skin-temperature thermistor, both for the stress model,
-  and maybe a moisture sensor. The `gsr` and `moisture` fields already exist; `temperatures`
-  (`lesion_c`, `reference_c`) was designed for a lesion-vs-healthy pair, now future scope, and
-  will change to one skin temperature alongside GSR. See the decisions log in
+- **Stress from the ECG needs its model:** the band and website handle heart rate and HRV now
+  (31 Oct); `web/models/stress_ecg.json` still has to be trained (WESAD chest ECG). Every sensor,
+  with its checks and limits: [SENSORS.md](SENSORS.md); decisions:
   [HARDWARE_PLAN.md](HARDWARE_PLAN.md).
 - **Security:** fine for a prototype. Wi-Fi between the band and the hub is plain HTTP today
   (HTTPS planned), and the hub's older photo and journal endpoints don't have the login yet.

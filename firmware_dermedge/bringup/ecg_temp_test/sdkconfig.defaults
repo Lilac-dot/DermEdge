@@ -1,0 +1,3 @@
+CONFIG_IDF_TARGET="esp32"
+# 1 ms ticks, so the 250 Hz ECG loop can wait 4 ticks between samples
+CONFIG_FREERTOS_HZ=1000

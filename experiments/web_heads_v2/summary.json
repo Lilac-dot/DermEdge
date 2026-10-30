@@ -1,0 +1,293 @@
+{
+  "stage2_eczema": {
+    "C": 10.0,
+    "threshold": 0.5018,
+    "mean_source_auc": 0.7841,
+    "by_source": {
+      "scin": {
+        "n_pos": 938,
+        "n_neg": 804,
+        "caught": 0.6588,
+        "cleared": 0.6343,
+        "auc": 0.7004
+      },
+      "skindisnet": {
+        "n_pos": 536,
+        "n_neg": 618,
+        "caught": 0.778,
+        "cleared": 0.8074,
+        "auc": 0.8678
+      }
+    },
+    "by_skindisnet_class": {
+      "AD": {
+        "n_pos": 70,
+        "n_neg": 0,
+        "caught": 0.6571
+      },
+      "EC": {
+        "n_pos": 466,
+        "n_neg": 0,
+        "caught": 0.7961
+      },
+      "SC": {
+        "n_pos": 0,
+        "n_neg": 343,
+        "cleared": 0.8863
+      },
+      "TC": {
+        "n_pos": 0,
+        "n_neg": 275,
+        "cleared": 0.7091
+      }
+    },
+    "leave_one_source_out": {
+      "train_without_scin": {
+        "n_pos": 938,
+        "n_neg": 804,
+        "caught": 0.209,
+        "cleared": 0.75,
+        "auc": 0.4705
+      },
+      "train_without_skindisnet": {
+        "n_pos": 536,
+        "n_neg": 618,
+        "caught": 0.3918,
+        "cleared": 0.4563,
+        "auc": 0.4163
+      }
+    }
+  },
+  "stage1_rash": {
+    "chosen_l2_pull": 0.001,
+    "current_head_in_sample": {
+      "scin": {
+        "n_pos": 1742,
+        "n_neg": 107,
+        "caught": 0.8307,
+        "cleared": 0.9159,
+        "auc": 0.9216
+      },
+      "skindisnet": {
+        "n_pos": 1710,
+        "n_neg": 0,
+        "caught": 0.3292
+      },
+      "scin_by_fitzpatrick": {
+        "I-II": {
+          "n_pos": 791,
+          "n_neg": 42,
+          "caught": 0.8508,
+          "cleared": 0.881,
+          "auc": 0.9164
+        },
+        "III-IV": {
+          "n_pos": 775,
+          "n_neg": 38,
+          "caught": 0.8426,
+          "cleared": 0.8947,
+          "auc": 0.9163
+        },
+        "V-VI": {
+          "n_pos": 139,
+          "n_neg": 16,
+          "caught": 0.6835,
+          "cleared": 1.0,
+          "auc": 0.9249
+        }
+      }
+    },
+    "current_head_in_sample_calibrated": {
+      "scin": {
+        "n_pos": 1742,
+        "n_neg": 107,
+        "caught": 0.8404,
+        "cleared": 0.8879,
+        "auc": 0.9214
+      },
+      "skindisnet": {
+        "n_pos": 1710,
+        "n_neg": 0,
+        "caught": 0.3292
+      },
+      "scin_by_fitzpatrick": {
+        "I-II": {
+          "n_pos": 791,
+          "n_neg": 42,
+          "caught": 0.8508,
+          "cleared": 0.881,
+          "auc": 0.9164
+        },
+        "III-IV": {
+          "n_pos": 775,
+          "n_neg": 38,
+          "caught": 0.8426,
+          "cleared": 0.8947,
+          "auc": 0.9163
+        },
+        "V-VI": {
+          "n_pos": 139,
+          "n_neg": 16,
+          "caught": 0.8058,
+          "cleared": 0.8125,
+          "auc": 0.9249
+        }
+      }
+    },
+    "new_head_cv": {
+      "0.001": {
+        "scin": {
+          "n_pos": 1742,
+          "n_neg": 107,
+          "caught": 0.8789,
+          "cleared": 0.8224,
+          "auc": 0.9172
+        },
+        "skindisnet": {
+          "n_pos": 1710,
+          "n_neg": 0,
+          "caught": 0.8421
+        },
+        "scin_by_fitzpatrick": {
+          "I-II": {
+            "n_pos": 791,
+            "n_neg": 42,
+            "caught": 0.8824,
+            "cleared": 0.7857,
+            "auc": 0.9
+          },
+          "III-IV": {
+            "n_pos": 775,
+            "n_neg": 38,
+            "caught": 0.8813,
+            "cleared": 0.8684,
+            "auc": 0.9176
+          },
+          "V-VI": {
+            "n_pos": 139,
+            "n_neg": 16,
+            "caught": 0.8561,
+            "cleared": 0.8125,
+            "auc": 0.9465
+          }
+        }
+      },
+      "0.0003": {
+        "scin": {
+          "n_pos": 1742,
+          "n_neg": 107,
+          "caught": 0.8536,
+          "cleared": 0.8318,
+          "auc": 0.9115
+        },
+        "skindisnet": {
+          "n_pos": 1710,
+          "n_neg": 0,
+          "caught": 0.952
+        },
+        "scin_by_fitzpatrick": {
+          "I-II": {
+            "n_pos": 791,
+            "n_neg": 42,
+            "caught": 0.8458,
+            "cleared": 0.8095,
+            "auc": 0.8927
+          },
+          "III-IV": {
+            "n_pos": 775,
+            "n_neg": 38,
+            "caught": 0.8645,
+            "cleared": 0.8684,
+            "auc": 0.9131
+          },
+          "V-VI": {
+            "n_pos": 139,
+            "n_neg": 16,
+            "caught": 0.8489,
+            "cleared": 0.8125,
+            "auc": 0.946
+          }
+        }
+      },
+      "0.0001": {
+        "scin": {
+          "n_pos": 1742,
+          "n_neg": 107,
+          "caught": 0.8553,
+          "cleared": 0.8224,
+          "auc": 0.9066
+        },
+        "skindisnet": {
+          "n_pos": 1710,
+          "n_neg": 0,
+          "caught": 0.9813
+        },
+        "scin_by_fitzpatrick": {
+          "I-II": {
+            "n_pos": 791,
+            "n_neg": 42,
+            "caught": 0.8483,
+            "cleared": 0.7857,
+            "auc": 0.8884
+          },
+          "III-IV": {
+            "n_pos": 775,
+            "n_neg": 38,
+            "caught": 0.8632,
+            "cleared": 0.8684,
+            "auc": 0.9068
+          },
+          "V-VI": {
+            "n_pos": 139,
+            "n_neg": 16,
+            "caught": 0.8561,
+            "cleared": 0.8125,
+            "auc": 0.9393
+          }
+        }
+      }
+    },
+    "new_head_cv_calibrated": {
+      "scin": {
+        "n_pos": 1742,
+        "n_neg": 107,
+        "caught": 0.8789,
+        "cleared": 0.8224,
+        "auc": 0.9172
+      },
+      "skindisnet": {
+        "n_pos": 1710,
+        "n_neg": 0,
+        "caught": 0.8421
+      },
+      "scin_by_fitzpatrick": {
+        "I-II": {
+          "n_pos": 791,
+          "n_neg": 42,
+          "caught": 0.8824,
+          "cleared": 0.7857,
+          "auc": 0.9
+        },
+        "III-IV": {
+          "n_pos": 775,
+          "n_neg": 38,
+          "caught": 0.8813,
+          "cleared": 0.8684,
+          "auc": 0.9176
+        },
+        "V-VI": {
+          "n_pos": 139,
+          "n_neg": 16,
+          "caught": 0.8561,
+          "cleared": 0.8125,
+          "auc": 0.9465
+        }
+      }
+    },
+    "fst_offsets": {
+      "I-II": 0.0,
+      "III-IV": 0.0,
+      "V-VI": 0.0
+    }
+  }
+}

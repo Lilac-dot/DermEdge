@@ -4,22 +4,22 @@
 //   Stage 1  CLIP ViT-B/16 image encoder (models/clip_vision_w8.*.onnx, 8-bit weights, from
 //            scripts/export_web_clip.py) + the fine-tuned rash head and per-skin-type offsets
 //            (models/heads.json)
-//   Stage 2  ResNet18 eczema vs 7 look-alikes (models/stage2.onnx) with a class activation map
-//            from its layer4 features
+//   Stage 2  eczema vs look-alikes head on the same CLIP embedding (heads.json "eczema", from
+//            scripts/train_web_heads_v2.py; it replaced a ResNet18 that was at chance on real
+//            phone photos). On laptops an occlusion map shows which parts of the photo it relied on.
 //   Stage 3  severity head on the same CLIP embedding
-// All three run on ONNX Runtime Web: WebGPU where the browser has it, else multithreaded
+// CLIP runs on ONNX Runtime Web: WebGPU where the browser has it, else multithreaded
 // WebAssembly (vercel.json sets the cross-origin isolation headers threads need).
-// Checked against the Python models: the 8-bit CLIP keeps the embedding within cosine 0.999 of
+// Checked against the Python model: the 8-bit CLIP keeps the embedding within cosine 0.999 of
 // fp32 and the same stage-1 decision on 98.7% of 300 SCIN phone photos (scripts/
-// check_web_clip_quantized.py); the ONNX ResNet18 matches PyTorch exactly.
+// check_web_clip_quantized.py).
 
 // Bump when a file in web/models changes, so browsers that cached the old copy fetch the new one
 // (also bump every ?v= in local-api.js).
-export const MODELS_V = 3;
-const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
+export const MODELS_V = 4;
 const CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073], CLIP_STD = [0.26862954, 0.26130258, 0.27577711];
 const CLIP_PARTS = 2, CACHE = 'dermedge-models';
-let clip, stage2, stage2Ready, text, heads, fc, ready, backend = '';
+let clip, text, heads, ready, backend = '';
 
 function report(onProgress, msg, frac) { if (onProgress) onProgress(msg, frac); }
 
@@ -96,20 +96,6 @@ async function loadClip(onProgress) {
   backend = `WebAssembly, ${window.crossOriginIsolated ? window.ort.env.wasm.numThreads || 'multi' : 1} thread(s)`;
 }
 
-// Stage 2 is only needed once a photo screens positive, so it downloads in the background
-// instead of in front of CLIP. Its session is created only after CLIP's: two sessions starting at
-// once both try to initialise ONNX Runtime's WebAssembly ("multiple calls to 'initWasm()'"),
-// which knocks CLIP off WebGPU. On phones it also waits to download until CLIP is running, so
-// the two files are never in memory at once.
-let clipReady;
-function loadStage2() {
-  if (!stage2Ready) stage2Ready = (MOBILE ? clipReady.then(() => fetchModel(`/models/stage2.onnx?v=${MODELS_V}`, () => {}))
-                                          : Promise.all([fetchModel(`/models/stage2.onnx?v=${MODELS_V}`, () => {}), clipReady]).then(([b]) => b))
-    .then(b => window.ort.InferenceSession.create(b, WASM_OPTS))
-    .then(s => { stage2 = s; }, e => { stage2Ready = null; throw e; });
-  return stage2Ready;
-}
-
 // A failed load (a dropped connection, the phone running short of memory) is forgotten, so a
 // later check tries again instead of failing until the app is restarted; the live camera's
 // checks within 20 s of a failure get the same error rather than restarting the download.
@@ -120,13 +106,12 @@ export function init(onProgress) {
     report(onProgress, 'Loading DermEdge models…', 0);
     window.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
     dropOldModels();
-    clipReady = loadClip(onProgress);
-    loadStage2().catch(e => console.warn('stage 2 preload failed; retrying on first use', e));
-    [text, heads, fc] = await Promise.all(['clip_text', 'heads', 'stage2_fc'].map(n => fetch(`/models/${n}.json?v=${MODELS_V}`).then(r => r.json())));
+    const clipReady = loadClip(onProgress);
+    [text, heads] = await Promise.all(['clip_text', 'heads'].map(n => fetch(`/models/${n}.json?v=${MODELS_V}`).then(r => r.json())));
     await clipReady;
     report(onProgress, `Models ready (${backend})`, 1);
   })().catch(e => {
-    ready = null; stage2Ready = null; clip = null;
+    ready = null; clip = null;
     failed = { at: Date.now(), error: new Error(`the skin model didn't load (${e.message || e}). Try again, or reopen the app.`) };
     throw failed.error;
   });
@@ -152,13 +137,44 @@ function clipPixels(bmp) {
   g.drawImage(bmp, (224 - w) / 2, (224 - h) / 2, w, h);
   const d = g.getImageData(0, 0, 224, 224).data, x = new Float32Array(3 * 224 * 224);
   for (let i = 0; i < 224 * 224; i++) for (let ch = 0; ch < 3; ch++) x[ch * 50176 + i] = (d[4 * i + ch] / 255 - CLIP_MEAN[ch]) / CLIP_STD[ch];
-  return new window.ort.Tensor('float32', x, [1, 3, 224, 224]);
+  return x;
 }
 
-async function clipEmbedding(bmp) {
-  const out = await serial(() => clip.run({ pixel_values: clipPixels(bmp) }));
+let lastRunMs = Infinity;  // how long the last single-photo CLIP run took
+async function embedPixels(x) {
+  const out = await serial(async () => {
+    const t = performance.now(), o = await clip.run({ pixel_values: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) });
+    lastRunMs = performance.now() - t;
+    return o;
+  });
   const e = Array.from(out.image_embeds.data), n = Math.hypot(...e);
-  return e.map(x => x / n);
+  return e.map(v => v / n);
+}
+
+async function clipEmbedding(bmp) { return embedPixels(clipPixels(bmp)); }
+
+const eczemaLogit = e => dot(e, heads.eczema.w) + heads.eczema.b;
+
+// Occlusion map for stage 2: cover one cell of an n x n grid at a time with CLIP's mean colour
+// (0 after normalising) and see how far the eczema-vs-look-alike score moves away from its
+// answer. Cells that move it most are what the decision rested on. The n*n covered copies go
+// through CLIP as one batch, and only where CLIP has the GPU.
+async function occlusionMap(x, base, n = 4) {
+  const dir = base >= 0 ? 1 : -1, cell = 224 / n, N = 3 * 50176, batch = new Float32Array(n * n * N);
+  for (let k = 0; k < n * n; k++) {
+    const gy = Math.floor(k / n), gx = k % n, o = k * N;
+    batch.set(x, o);
+    for (let ch = 0; ch < 3; ch++) for (let r = Math.round(gy * cell); r < Math.round((gy + 1) * cell); r++)
+      batch.fill(0, o + ch * 50176 + r * 224 + Math.round(gx * cell), o + ch * 50176 + r * 224 + Math.round((gx + 1) * cell));
+  }
+  const out = await serial(() => clip.run({ pixel_values: new window.ort.Tensor('float32', batch, [n * n, 3, 224, 224]) }));
+  const d = out.image_embeds.data, cam = new Float32Array(n * n);
+  for (let k = 0; k < n * n; k++) {
+    const e = Array.from(d.subarray(k * 512, (k + 1) * 512)), m = Math.hypot(...e);
+    cam[k] = Math.max(0, dir * (base - eczemaLogit(e.map(v => v / m))));
+  }
+  const mx = Math.max(...cam) || 1;
+  return { n, v: cam.map(v => v / mx) };
 }
 
 function fstGroup(f) { return !f ? null : f <= 2 ? 'I-II' : f <= 4 ? 'III-IV' : 'V-VI'; }
@@ -195,18 +211,6 @@ export function quality(bmp) {
   return { ok: !issues.length, issues, sharpness: +sharpness.toFixed(1), brightness: +brightness.toFixed(1) };
 }
 
-async function stage2Run(bmp) {
-  const c = new OffscreenCanvas(224, 224), g = c.getContext('2d'); g.drawImage(bmp, 0, 0, 224, 224);
-  const d = g.getImageData(0, 0, 224, 224).data, x = new Float32Array(3 * 224 * 224);
-  for (let i = 0; i < 224 * 224; i++) for (let ch = 0; ch < 3; ch++) x[ch * 50176 + i] = (d[4 * i + ch] / 255 - MEAN[ch]) / STD[ch];
-  const out = await serial(() => stage2.run({ image: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) }));
-  const [l0, l1] = out.logits.data, p = 1 / (1 + Math.exp(l0 - l1));
-  const f = out.features.data, dir = p >= 0.5 ? 1 : -1, cam = new Float32Array(49);
-  for (let i = 0; i < 49; i++) { let s = 0; for (let ch = 0; ch < 512; ch++) s += fc.w[ch] * f[ch * 49 + i]; cam[i] = Math.max(0, dir * s); }
-  const mx = Math.max(...cam) || 1;
-  return { p, cam: cam.map(v => v / mx) };
-}
-
 function jet(v) {  // matplotlib-like jet colormap, v in 0..1
   const r = Math.min(1, Math.max(0, 1.5 - Math.abs(4 * v - 3))), g = Math.min(1, Math.max(0, 1.5 - Math.abs(4 * v - 2))),
         b = Math.min(1, Math.max(0, 1.5 - Math.abs(4 * v - 1)));
@@ -217,12 +221,13 @@ export function toDataURL(bmp, size = 512, cam = null) {
   const s = size / Math.max(bmp.width, bmp.height), w = Math.round(bmp.width * Math.min(1, s)), h = Math.round(bmp.height * Math.min(1, s));
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'); g.drawImage(bmp, 0, 0, w, h);
-  if (cam) {
-    const m = document.createElement('canvas'); m.width = m.height = 7;
-    const mg = m.getContext('2d'), id = mg.createImageData(7, 7);
-    cam.forEach((v, i) => { const [r, gg, b] = jet(v); id.data.set([r, gg, b, 255 * 0.55 * v], 4 * i); });
+  if (cam) {  // over the centre square CLIP saw
+    const m = document.createElement('canvas'); m.width = m.height = cam.n;
+    const mg = m.getContext('2d'), id = mg.createImageData(cam.n, cam.n);
+    cam.v.forEach((v, i) => { const [r, gg, b] = jet(v); id.data.set([r, gg, b, 255 * 0.55 * v], 4 * i); });
     mg.putImageData(id, 0, 0);
-    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(m, 0, 0, w, h);
+    const side = Math.min(w, h);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(m, (w - side) / 2, (h - side) / 2, side, side);
   }
   return c.toDataURL('image/jpeg', 0.85);
 }
@@ -230,13 +235,15 @@ export function toDataURL(bmp, size = 512, cam = null) {
 export async function analyze(blob, fitzpatrick) {
   await init();
   const bmp = await bitmap(blob);
-  const e = await clipEmbedding(bmp), s = stage1(e, fitzpatrick);
+  const x = clipPixels(bmp), e = await embedPixels(x), s = stage1(e, fitzpatrick);
   const res = { p_rash: +s.p_rash.toFixed(3), skin: s.skin, calibrated_for: s.calibrated_for, p_eczema: null, severity: null };
   let cam = null;
   if (s.skin && s.p_rash >= 0.5) {
-    await loadStage2();
-    const r = await stage2Run(bmp); res.p_eczema = +r.p.toFixed(3); cam = r.cam;
-    if (r.p >= 0.5) {
+    const z = eczemaLogit(e), p = sigmoid(z);
+    res.p_eczema = +p.toFixed(3);
+    // 16 more photos through CLIP: only on a GPU fast enough to do it in about a second
+    if (backend === 'WebGPU' && lastRunMs < 80) cam = await occlusionMap(x, z);
+    if (p >= 0.5) {
       const score = Math.min(12, Math.max(0, dot(e, heads.severity.w) + heads.severity.b));
       const band = heads.severity.classes[score < heads.severity.band_edges[0] ? 0 : score < heads.severity.band_edges[1] ? 1 : 2];
       res.severity = { score: +score.toFixed(1), band };

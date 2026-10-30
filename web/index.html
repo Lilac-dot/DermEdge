@@ -516,8 +516,9 @@
     <div class="card" style="margin-top:20px">
       <h2>Does it work across skin tones?</h2>
       <p class="muted">Stage 1 (normal vs rash) on held-out real smartphone photos, by Fitzpatrick skin type.
-        At one shared threshold the model missed more rashes on darker skin, even though it ranked them
-        almost as well (similar AUC). Choosing your skin type applies a calibrated threshold.</p>
+        Our first screen missed a third of rashes on Fitzpatrick V–VI. After we added South Asian clinic photos to its
+        training it catches rashes on darker skin as often as on lighter skin at one shared threshold, so the calibrated
+        columns now match. Few healthy V–VI photos exist to test with, so the cleared figure for V–VI is rough.</p>
       <div style="overflow-x:auto"><table class="ft" id="fairTable"></table></div>
     </div>
   </section>
@@ -532,7 +533,7 @@
         <div class="point"><h3>Consistent</h3>It scores the same photo the same way every time, so a change in the score is a change in your skin.</div>
         <div class="point"><h3>Tracks between visits</h3>Daily check-ins per body site, alongside your treatments, journal and wearable triggers.</div>
         <div class="point"><h3>Measurable change</h3>"I think it's better" becomes "inner elbow 6.1 → 4.3", something you and your doctor can act on.</div>
-        <div class="point"><h3>Explains itself</h3>The heatmap shows where the model looked, so your doctor can check its reasoning.</div>
+        <div class="point"><h3>Explains itself</h3>On a laptop, a heatmap shows which parts of the photo the eczema decision rested on, so your doctor can check its reasoning.</div>
       </div>
     </div>
 
@@ -540,14 +541,17 @@
       <h2>How accurate is this?</h2>
       <p class="muted" style="margin-top:0">What we measured, and what we haven't yet. DermEdge is a screening aid: a dermatologist makes the diagnosis.</p>
       <ul class="privacy">
-        <li>The rash screen misses about 1 in 6 rashes.
-          <span>It caught 1,182 of 1,444 rashes on real phone photos (SCIN), tested on people it never saw in training.</span></li>
-        <li>Eczema vs look-alikes is right about 4 times in 5.
-          <span>81% accuracy on 507 clinical photos. Accuracy on phone and webcam photos hasn't been measured yet.</span></li>
+        <li>The rash screen misses about 1 in 8 rashes, and flags about 1 in 5 healthy photos.
+          <span>On 1,849 real phone photos (SCIN), tested on people it never saw in training, it caught 88% of rashes and cleared 82%
+            of healthy skin. On 1,710 photos from two hospitals in Bangladesh (SkinDisNet) it now catches 84% of rashes, up from 33%.</span></li>
+        <li>Telling eczema from look-alikes is the hardest part: right about 2 times in 3 on US phone photos, 4 in 5 on South Asian clinic photos.
+          <span>Caught 66% of eczema and cleared 63% of look-alikes on SCIN, and 78% and 81% on SkinDisNet. Our first model scored 81% on
+            atlas photos but was at chance on real phone photos, so we replaced it.</span></li>
         <li>Severity tends to rate mild eczema as moderate.
           <span>Off by 1.2 points on average on the 0–12 scale, and within one band 98% of the time.</span></li>
-        <li>Darker skin needs your skin type to be set.
-          <span>On Fitzpatrick V–VI the screen caught 67% of rashes at the default setting and 83% once calibrated. See the Doctor report tab.</span></li>
+        <li>Darker skin is screened as well as lighter skin.
+          <span>On Fitzpatrick V–VI the screen catches 86% of rashes, the same as on lighter skin. It was 67% before we added South Asian
+            clinic photos to its training. Only 16 healthy V–VI photos were available to test, so that figure is rough.</span></li>
         <li>Flare risk is a designed score, not yet clinically validated.
           <span>It multiplies the photo result by your triggers. Checking it against real flares needs a study over time.</span></li>
         <li>Band stress comes from skin conductance only, and misses some stress.
@@ -1223,7 +1227,7 @@ function obRender() {
     $("obNext").disabled = !obState.consent; $("obNext").textContent = "Next";
   } else if (obStep === 1) {
     el.innerHTML = `<h2 id="obTitle">Your skin type</h2>
-      <p class="muted">The rash screen missed more rashes on darker skin until we calibrated it. Picking your Fitzpatrick type uses the right setting for you.</p>
+      <p class="muted">Your Fitzpatrick type lets the rash screen use a setting checked for your skin tone, and shows on your doctor report.</p>
       <div class="swatches" id="obSwatches" style="margin-top:12px"></div>`;
     const draw = () => {
       $("obSwatches").innerHTML = FST.map(([n, c], i) => `<div class="sw ${obState.fitz === i + 1 ? "on" : ""}" style="background:${c}" data-f="${i + 1}" title="Type ${n}">${n}</div>`).join("") +

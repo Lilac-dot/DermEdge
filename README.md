@@ -28,15 +28,17 @@ DermEdge band + GSR, moisture ─► scratching, stress, hydration ────�
 
 | Part | Model | Runs on | Result |
 |---|---|---|---|
-| 1. Normal vs rash | CLIP ViT-B/16 + fine-tuned head | Laptop hub | **AUC 0.93** on held-out real phone photos (SCIN, 5-fold CV by case) |
-| 2. Eczema vs look-alikes | ResNet18 | Laptop hub | **81.1% accuracy, 82.5% recall** (curated test split, 507 images) |
+| 1. Normal vs rash | CLIP ViT-B/16 + fine-tuned head | Browser | **AUC 0.92**: 88% of rashes caught, 82% of healthy skin cleared on real phone photos (SCIN, 5-fold CV by case); 84% of rashes caught on SkinDisNet (Bangladesh hospitals), up from 33% |
+| 2. Eczema vs look-alikes | Head on the same CLIP embedding | Browser | **AUC 0.70** on SCIN phone photos, **0.87** on SkinDisNet (5-fold CV). Replaced a ResNet18 that scored 81% on atlas photos but AUC 0.56 and 0.46 on these |
 | 3. Severity | Ridge head on CLIP features, 0–12 EASI-signs score | Laptop hub | Mean error **1.2 points**; band within one step **97.6%** |
 | Stress | LightGBM on GSR, skin temp, PPG, motion, calibrated per wearer | Laptop hub | **AUC 0.92–0.94** leave-one-person-out (WESAD) |
 | *Future scope:* on-device screen | MobileNetV1-0.25 INT8, 300 KB | ESP32-CAM | **97.1%** accuracy on its test set |
 
 Skin temperature is used only inside the stress model, not as an eczema signal. Plan, decisions and future scope: [docs/HARDWARE_PLAN.md](docs/HARDWARE_PLAN.md).
 
-Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis, insect bites, lichen planus, drug eruption and rosacea.
+Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis, insect bites, lichen planus, drug eruption and rosacea (plus scabies and tinea in SkinDisNet).
+
+**31 Oct 2026, v2 heads in the browser.** Testing on photos the models had never seen showed the first stage-2 ResNet18 at chance on real phone photos, and the rash screen passing only a third of South Asian clinic rashes. We compared CLIP with two dermatology encoders, DermLIP and DermLIP-PanDerm, on a fair test (SkinDisNet, published after their training data). Neither was clearly better (AUC 0.906 and 0.890 vs CLIP's 0.890), so we kept CLIP and retrained the heads on SCIN plus SkinDisNet: `scripts/compare_encoders.py`, `scripts/train_web_heads_v2.py`, results in `experiments/encoder_comparison/` and `experiments/web_heads_v2/`. The confusion matrices below are from the first version, and the Python hub (`app/`) still runs it.
 
 | Stage 1: normal vs rash | Stage 2: eczema vs look-alikes |
 |---|---|
@@ -44,12 +46,12 @@ Stage 2 tells eczema apart from seven look-alikes: psoriasis, tinea, candidiasis
 | Real phone photos (SCIN), held out by case: 1182 of 1444 rashes caught, 84 of 90 healthy photos cleared. | Curated test split: of 251 eczema photos it caught 207 and missed 44; of 256 look-alikes it flagged 52 as eczema. |
 
 ### Fair across skin tones
-At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI, even though it ranked them almost as well (AUC 0.91 vs 0.93). Choosing your skin type applies a calibrated threshold, which brings V–VI to **83%**. Details: `experiments/clip_rash_head/summary.json`.
+The first rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on V–VI at one shared threshold, so it needed a calibrated threshold for darker skin. After South Asian clinic photos were added to its training (v2), it catches **86%** on V–VI at the shared threshold, the same as lighter skin, with no calibration. Only 16 healthy V–VI photos exist in SCIN, so its healthy-skin figure for V–VI (81% cleared) is rough. Details: `experiments/web_heads_v2/summary.json`.
 
 ## Features
 - Live camera with a rash / no-rash badge, on only when you turn it on; auto-analyses when a rash is held in view
 - Photo quality check: asks for a retake when the photo is blurry, too dark or washed out
-- Grad-CAM heatmap of where the eczema model looked
+- Heatmap of which parts of the photo the eczema decision rested on (occlusion map; laptops with a fast GPU)
 - "Not sure, see a dermatologist" when the models disagree or are uncertain
 - Body-site tracking with before/after comparison ("inner elbow 6.1 → 4.3, better")
 - Wearable markers: stress, heart rate, skin conductance, skin temperature, hydration deficit, night scratching
@@ -63,9 +65,9 @@ At one shared threshold, the rash screen caught 84% of rashes on Fitzpatrick I�
 - History chart, sample history for demos (clearly labelled), printable doctor report
 
 ## Try it in your browser
-`web/` is a static version of the dashboard where every model runs on the visitor's own device: CLIP through transformers.js (WebGPU + fp16 where available, otherwise WebAssembly), the eczema-vs-look-alikes ResNet18 through ONNX Runtime Web, and the stress model in plain JavaScript. History is kept in the browser, nothing is uploaded, and the wearable tab uses a simulated wristband. The first visit downloads the skin model once (~175 MB with WebGPU). It's deployed on Vercel from this repo (`vercel.json`); to try it locally, serve `web/` with any static server.
+`web/` is a static version of the dashboard where every model runs on the visitor's own device: CLIP ViT-B/16 with 8-bit weights through ONNX Runtime Web (WebGPU on laptops, WebAssembly on phones), the eczema-vs-look-alikes and severity heads on the same CLIP embedding, and the stress model in plain JavaScript. History is kept in the browser, nothing is uploaded, and the wearable tab uses a simulated wristband. The first visit downloads the skin model once (about 90 MB). It's deployed on Vercel from this repo (`vercel.json`); to try it locally, serve `web/` with any static server.
 
-Checked against the Python models: the browser CLIP gives the same stage-1 decision on 98.5% of 200 held-out phone photos, and the ONNX ResNet18 and JavaScript stress model match their Python versions exactly. `scripts/export_web_models.py` rebuilds `web/models/`.
+Checked against the Python models: the browser CLIP gives the same stage-1 decision on 98.5% of 200 held-out phone photos, and the JavaScript stress model matches its Python version exactly. `scripts/export_web_models.py` rebuilds `web/models/`.
 
 **Install it as an app (PWA):** in Chrome or Edge, use *Install DermEdge* on the Home tab (or the browser's install icon); on Android it goes on the home screen. `web/sw.js` caches the app and ONNX Runtime, and `engine.mjs` already caches the models, so after the first visit it opens and checks skin with no connection. Bluetooth to the band works in the installed app on Android and desktop Chrome/Edge, not on iPhone.
 

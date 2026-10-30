@@ -1,0 +1,254 @@
+{
+  "test": "5-fold CV on SCIN phone photos, grouped by case; same logistic head per encoder; C picked per encoder from [0.1, 1.0, 10.0] (same advantage for each)",
+  "caveat": "Derm1M (DermLIP's training data) includes 6,518 SCIN image-text pairs, so SCIN results favour both DermLIP models; skindisnet_external is the fair test",
+  "encoders": [
+    "clip",
+    "dermlip",
+    "dermlip_panderm"
+  ],
+  "rash": {
+    "n_pos": 1742,
+    "n_neg": 107,
+    "n_cases": 848,
+    "clip": {
+      "C": 10.0,
+      "auc": 0.8927,
+      "caught": 0.9099,
+      "cleared": 0.7009,
+      "balanced_acc": 0.8054,
+      "by_fitzpatrick": {
+        "I-II": {
+          "auc": 0.8669,
+          "caught": 0.9166,
+          "cleared": 0.6905,
+          "balanced_acc": 0.8035
+        },
+        "III-IV": {
+          "auc": 0.9103,
+          "caught": 0.9084,
+          "cleared": 0.6579,
+          "balanced_acc": 0.7831
+        },
+        "V-VI": {
+          "auc": 0.8777,
+          "caught": 0.8705,
+          "cleared": 0.75,
+          "balanced_acc": 0.8103
+        }
+      }
+    },
+    "dermlip": {
+      "C": 1.0,
+      "auc": 0.9206,
+      "caught": 0.8932,
+      "cleared": 0.8505,
+      "balanced_acc": 0.8718,
+      "by_fitzpatrick": {
+        "I-II": {
+          "auc": 0.9095,
+          "caught": 0.8913,
+          "cleared": 0.8333,
+          "balanced_acc": 0.8623
+        },
+        "III-IV": {
+          "auc": 0.9181,
+          "caught": 0.8994,
+          "cleared": 0.8684,
+          "balanced_acc": 0.8839
+        },
+        "V-VI": {
+          "auc": 0.9366,
+          "caught": 0.8849,
+          "cleared": 0.875,
+          "balanced_acc": 0.8799
+        }
+      }
+    },
+    "dermlip_panderm": {
+      "C": 10.0,
+      "auc": 0.8966,
+      "caught": 0.9036,
+      "cleared": 0.7383,
+      "balanced_acc": 0.8209,
+      "by_fitzpatrick": {
+        "I-II": {
+          "auc": 0.8973,
+          "caught": 0.9102,
+          "cleared": 0.7619,
+          "balanced_acc": 0.8361
+        },
+        "III-IV": {
+          "auc": 0.8984,
+          "caught": 0.9097,
+          "cleared": 0.7105,
+          "balanced_acc": 0.8101
+        },
+        "V-VI": {
+          "auc": 0.9101,
+          "caught": 0.8633,
+          "cleared": 0.8125,
+          "balanced_acc": 0.8379
+        }
+      }
+    },
+    "auc_diff_vs_clip_95ci": {
+      "dermlip": [
+        -0.0033,
+        0.0578
+      ],
+      "dermlip_panderm": [
+        -0.0271,
+        0.0362
+      ]
+    }
+  },
+  "eczema": {
+    "n_pos": 938,
+    "n_neg": 804,
+    "n_cases": 787,
+    "clip": {
+      "C": 10.0,
+      "auc": 0.7501,
+      "caught": 0.7068,
+      "cleared": 0.6779,
+      "balanced_acc": 0.6923
+    },
+    "dermlip": {
+      "C": 10.0,
+      "auc": 0.8231,
+      "caught": 0.7484,
+      "cleared": 0.745,
+      "balanced_acc": 0.7467
+    },
+    "dermlip_panderm": {
+      "C": 1.0,
+      "auc": 0.9328,
+      "caught": 0.8507,
+      "cleared": 0.8731,
+      "balanced_acc": 0.8619
+    },
+    "resnet18_stage2_website": {
+      "auc": 0.5604,
+      "caught": 0.0981,
+      "cleared": 0.9565,
+      "balanced_acc": 0.5273
+    },
+    "auc_diff_vs_clip_95ci": {
+      "dermlip": [
+        0.0521,
+        0.0936
+      ],
+      "dermlip_panderm": [
+        0.1583,
+        0.2084
+      ],
+      "resnet18_stage2_website": [
+        -0.2308,
+        -0.1491
+      ]
+    }
+  },
+  "skindisnet_external": {
+    "test": "eczema heads trained on all SCIN rash photos, tested on SkinDisNet (never seen by any model)",
+    "positives": [
+      "AD",
+      "EC"
+    ],
+    "negatives": [
+      "SC",
+      "TC"
+    ],
+    "n_pos": 536,
+    "n_neg": 618,
+    "clip": {
+      "auc": 0.4163,
+      "caught": 0.3918,
+      "cleared": 0.4515,
+      "balanced_acc": 0.4216
+    },
+    "dermlip": {
+      "auc": 0.516,
+      "caught": 0.6996,
+      "cleared": 0.3058,
+      "balanced_acc": 0.5027
+    },
+    "dermlip_panderm": {
+      "auc": 0.5108,
+      "caught": 0.5037,
+      "cleared": 0.5194,
+      "balanced_acc": 0.5116
+    },
+    "resnet18_stage2_website": {
+      "auc": 0.4649,
+      "caught": 0.0616,
+      "cleared": 0.932,
+      "balanced_acc": 0.4968
+    },
+    "auc_diff_vs_clip_95ci": {
+      "dermlip": [
+        0.0678,
+        0.1311
+      ],
+      "dermlip_panderm": [
+        0.0591,
+        0.1302
+      ],
+      "resnet18_stage2_website": [
+        0.0086,
+        0.0925
+      ]
+    }
+  },
+  "skindisnet_within": {
+    "test": "5-fold CV within SkinDisNet, by photo (no patient IDs), same head per encoder",
+    "clip": {
+      "C": 10.0,
+      "auc": 0.8899,
+      "caught": 0.8172,
+      "cleared": 0.8269,
+      "balanced_acc": 0.822,
+      "right_by_class": {
+        "AD": 0.5857,
+        "EC": 0.8519,
+        "SC": 0.9009,
+        "TC": 0.7345
+      }
+    },
+    "dermlip": {
+      "C": 10.0,
+      "auc": 0.9057,
+      "caught": 0.819,
+      "cleared": 0.8479,
+      "balanced_acc": 0.8335,
+      "right_by_class": {
+        "AD": 0.5,
+        "EC": 0.867,
+        "SC": 0.9155,
+        "TC": 0.7636
+      }
+    },
+    "dermlip_panderm": {
+      "C": 10.0,
+      "auc": 0.8896,
+      "caught": 0.8004,
+      "cleared": 0.8107,
+      "balanced_acc": 0.8055,
+      "right_by_class": {
+        "AD": 0.5143,
+        "EC": 0.8433,
+        "SC": 0.9009,
+        "TC": 0.6982
+      }
+    },
+    "auc_diff_vs_clip_95ci": {
+      "dermlip": [
+        0.0023,
+        0.0293
+      ],
+      "dermlip_panderm": [
+        -0.0187,
+        0.0182
+      ]
+    }
+  }
+}

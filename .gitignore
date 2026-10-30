@@ -33,3 +33,6 @@ archive/*/sdkconfig
 
 # OS
 .DS_Store
+
+# embedding caches from scripts/compare_encoders.py (rebuilt from the datasets)
+experiments/encoder_comparison/*.npz

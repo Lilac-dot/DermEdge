@@ -11,6 +11,10 @@ visitor's device:
   web/models/stress_model.json  the calibrated WESAD LightGBM as a plain tree list for a JS evaluator
 
 Then checks the ONNX model against PyTorch on the curated validation split.
+
+Since 31 Oct 2026 the website runs v2 heads instead: scripts/train_web_heads_v2.py --write puts a
+retrained rash head and an "eczema" head (which replaced stage2.onnx in engine.mjs) into
+heads.json. This script writes the v1 heads, so run that one again after it.
 """
 import ctypes
 import json

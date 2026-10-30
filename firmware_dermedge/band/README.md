@@ -53,7 +53,8 @@ hardware timer and reads the LM35 on every sample, averaged over each second, bo
   Electrodes coming off starts a new window. Readings go out only while recording.
 - **Skin temperature:** an LM35 under the band, 10 mV per °C, read with the ADC at 0 dB for the
   finest steps. It counts once it has stayed in 10-50 °C and steady for 3 s, and goes out as a
-  5 s average.
+  5 s average. The LM35 is within about 0.5-1 °C, but the ESP32's ADC is off by tens of
+  millivolts at 0.3 V, which is several degrees: calibrate each band once with `temp cal`.
 - Nothing is sent while a reading isn't real, so a gap means "no data", never zeros. The
   Recording's Sensors page (tap) shows both; the header says **SIM** while they're simulated.
 - The stress model itself runs on the website (`web/models/stress_ecg.json`, still to come).
@@ -63,6 +64,8 @@ Over USB serial (`./idf.sh -p /dev/cu.SLAB_USBtoUART monitor`, or any serial ter
 | Command | Does |
 |---|---|
 | `skin on` / `skin off` | once a second: the ECG and LM35 pins' millivolts, electrodes on/off, beats, heart rate, temperature |
+| `temp cal 23.4` | calibrate the LM35: with it settled for 5 minutes next to a reference thermometer reading 23.4 °C, averages 10 s and stores the offset (refused if over 10 °C: that's wiring). The band pauses for those 10 s |
+| `temp cal clear` | remove the LM35 calibration |
 | `sim on` / `sim stress` / `sim off` | a simulated ECG (about 68 bpm calm, 92 stressed) and temperature instead of the sensors |
 | `start` / `stop` | start or stop a recording, like the touch pad (works without the website) |
 | `peek` / `peek 40` | the next readings exactly as they'll go out over Bluetooth (from position 40) |

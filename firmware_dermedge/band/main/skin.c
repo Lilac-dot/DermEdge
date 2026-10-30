@@ -7,6 +7,13 @@ float skin_lm35_c(float mv) { return mv / 10.0f; }
 
 bool skin_temp_plausible(float c) { return c >= SKIN_TEMP_MIN_C && c <= SKIN_TEMP_MAX_C; }
 
+bool skin_temp_offset(float measured, float reference, float *offset) {
+    float d = reference - measured;
+    if (!skin_temp_plausible(measured) || !skin_temp_plausible(reference) || fabsf(d) > SKIN_TEMP_MAX_OFFSET_C) return false;
+    *offset = d;
+    return true;
+}
+
 // --- R-peak detector -----------------------------------------------------------------------
 #define MS_PER_SAMPLE (1000 / SKIN_ECG_HZ)
 

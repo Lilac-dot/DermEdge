@@ -165,6 +165,11 @@ static void test_skin(void) {
     CHECK(fabsf(skin_lm35_c(330) - 33.0f) < 0.001f, "LM35: 330 mV is 33 C");
     CHECK(!skin_temp_plausible(skin_lm35_c(0)), "LM35 at 0 V (unplugged or shorted) rejected");
     CHECK(!skin_temp_plausible(skin_lm35_c(950)), "LM35 at the top of the ADC's range rejected");
+    float off = 99;
+    CHECK(skin_temp_offset(28.6f, 23.4f, &off) && fabsf(off + 5.2f) < 0.001f, "calibration: 28.6 read against 23.4 is -5.2, got %.2f", off);
+    off = 99;
+    CHECK(!skin_temp_offset(63.0f, 24.0f, &off) && off == 99, "63 C against 24 C is refused (wiring, not inaccuracy)");
+    CHECK(!skin_temp_offset(36.0f, 24.0f, &off), "12 C apart is refused");
 
     skin_sim_t sim;
     ecg_det_t d;

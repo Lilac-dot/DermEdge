@@ -4,7 +4,7 @@ Every part on the band as of 31 Oct 2026: what it does for DermEdge, how it's wi
 datasheet promises, what we've measured ourselves, and what the research says for and against
 using it this way. Decisions and the full pin map are in [HARDWARE_PLAN.md](HARDWARE_PLAN.md).
 
-**Status key:** ✅ checked on our board · 🟡 partly checked · ⚠️ readings not trustworthy yet · ⬜ not checked yet
+**Status key:** ✅ checked on our board · 🟡 partly checked · ⬜ not checked yet
 
 ## At a glance
 
@@ -15,7 +15,7 @@ using it this way. Decisions and the full pin map are in [HARDWARE_PLAN.md](HARD
 | 1.8" ST7735 TFT | Screen | 23, 18, 5, 16, 4 (SPI) | **5V** | ✅ |
 | 4-pad capacitive touch module | Navigation | 27 (OUT1) | 3V3 | ✅ |
 | AD8232 ECG module | Stress, from heart rate and HRV | 32 (OUTPUT), 33 (LO+), 34 (LO−) | 3V3 | 🟡 |
-| LM35 temperature sensor | Wrist skin temperature, for the stress model | 35 | **5V** | ⚠️ |
+| LM35 temperature sensor | Wrist skin temperature, for the stress model | 35 | **5V** | 🟡 |
 
 All grounds are shared. Analog sensors use **ADC1** pins only (32-39), because ADC2 stops working
 while Bluetooth is on.
@@ -148,19 +148,23 @@ links wearable readings to eczema flares (see the research summary at the end).
 - **Placement:** under the band against the inside of the wrist, on a lead away from the ESP32's
   own heat. The TO-92 package touches skin poorly and reacts slowly: thermal paste or a small
   copper disc on the flat face helps; let it settle a minute.
-- **Our measurements (31 Oct):** ⚠️ not trustworthy yet. Three runs on the same afternoon read
-  34.8-35.5 °C, then about 63 °C, then about 8 °C, each steady within itself. That pattern means
-  GPIO 35 isn't seeing a properly connected LM35 (a loose middle leg, the part in backwards, or a
-  different TO-92 part). The firmware rejects readings outside 10-50 °C, so the 63 and 8 °C runs
-  were never sent. To do: check the wiring and the part's marking, then an air-vs-skin check
-  against a reference thermometer.
+- **Calibration:** the LM35 is within about 0.5-1 °C, but the ESP32's ADC is off by tens of
+  millivolts near 0.3 V, which is several degrees. Each band is calibrated once against a
+  reference thermometer (`temp cal <°C>` over USB serial, with both settled side by side for 5
+  minutes): a one-point offset, stored on the band. Offsets over 10 °C are refused, because that
+  much is a wiring fault, not inaccuracy.
+- **Our measurements (31 Oct):** 🟡 three early runs read 34.8-35.5 °C, then about 63 °C, then
+  about 8 °C: a loose connection (the firmware rejects anything outside 10-50 °C, so those were
+  never sent). After the wiring settled it read a steady 31.0-31.3 °C, and the calibration
+  command was checked on the board (a 90 °C reference refused, a 30 °C one stored as −0.49 °C).
+  Still to do: calibrate against a real thermometer, then an air-vs-skin check.
 - **Research, for:** stress lowers skin temperature at distal sites such as the fingers (Vinkers et
   al. 2013); in WESAD it dropped under stress in 12 of 15 people. Heat and sweating are
   established itch triggers (Murota et al. 2017), so a rise is also worth showing.
 - **Research, against:** the effect depends on body site (none at proximal sites) and sex
   (Vinkers et al. 2013), and the wrist sits in between, so expect small changes. Going outside or
   into air conditioning moves skin temperature too.
-- **Status:** ⚠️ wiring to check before any reading counts.
+- **Status:** 🟡 steady now; needs its one-time calibration against a thermometer.
 
 ## Dropped sensors
 

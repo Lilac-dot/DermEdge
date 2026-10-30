@@ -7,7 +7,8 @@
 // "raw on" on the USB serial line streams the raw 800 Hz samples for tools/record.py. A skin
 // task samples the ECG at 250 Hz and the LM35 (skin_adc.c); every 30 s of electrode contact with
 // the hand still becomes one heart-rate/HRV reading, and skin temperature goes out every 5 s.
-// "sim on" stands in for both sensors, "skin on" prints the pins. The website relays the
+// "sim on" stands in for both sensors, "skin on" prints the pins, "temp cal <C>" calibrates the
+// LM35 against a reference thermometer. The website relays the
 // readings to the laptop hub (app/band.py); recordings made offline wait in the outbox (about
 // an hour of them) and go out when the laptop reconnects.
 #include <math.h>
@@ -361,7 +362,7 @@ static void peek(int from) {
 }
 
 // From the USB serial line: "raw on/off" (tools/record.py), "sim on/stress/off", "skin on/off",
-// "peek", and anything the website can send (start, stop, ...)
+// "temp cal <C>" / "temp cal clear", "peek", and anything the website can send (start, stop, ...)
 static void serial_commands(void) {
     static char line[32];
     static int len;
@@ -385,6 +386,17 @@ static void serial_commands(void) {
             ESP_LOGI(TAG, "heart and temperature real");
         } else if (!strcmp(line, "skin on") || !strcmp(line, "skin off")) {
             skin_set_debug(!strcmp(line, "skin on"));
+        } else if (!strcmp(line, "temp cal clear")) {
+            skin_temp_cal_clear();
+            ESP_LOGI(TAG, "LM35 calibration cleared");
+        } else if (!strncmp(line, "temp cal ", 9)) {  // "temp cal 23.4": what a reference thermometer reads now
+            float ref = strtof(line + 9, NULL), off, measured;
+            ESP_LOGI(TAG, "LM35 calibration: averaging 10 s against %.2f C, keep it still...", ref);
+            if (skin_temp_calibrate(ref, &off, &measured))
+                ESP_LOGI(TAG, "LM35 calibrated: read %.2f C, reference %.2f C, offset %+.2f C saved", measured, ref, off);
+            else
+                ESP_LOGW(TAG, "LM35 calibration refused: read %.2f C against %.2f C. Over 10 C apart means a wiring "
+                         "fault, not inaccuracy; or the reading wasn't steady (loose wire, still settling)", measured, ref);
         } else if (!strcmp(line, "raw off")) {
             raw_mode = false;
             esp_log_level_set("*", ESP_LOG_INFO);

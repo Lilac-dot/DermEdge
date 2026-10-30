@@ -8,7 +8,9 @@
 //         beat-timing features the stress model uses. Short windows are valid: 30-120 s of RMSSD
 //         agrees well with 5 minutes (Munoz et al. 2015, 3,387 adults).
 //   temp  an LM35 on the wrist: 10 mV per degree C. One input to the stress model (distal skin
-//         cools slightly under stress), not an eczema marker.
+//         cools slightly under stress), not an eczema marker. The LM35 itself is within about
+//         0.5-1 C, but the ESP32's ADC is off by tens of millivolts near 0.3 V, several degrees,
+//         so "temp cal <C>" stores a one-point offset against a reference thermometer.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,6 +18,7 @@
 #define SKIN_ECG_HZ 250
 #define SKIN_TEMP_MIN_C 10.0f    // outside 10-50 C the LM35 is unplugged, floating or shorted
 #define SKIN_TEMP_MAX_C 50.0f
+#define SKIN_TEMP_MAX_OFFSET_C 10.0f  // more than this isn't inaccuracy: check the wiring
 
 #define ECG_REFRACTORY_MS 280    // no two beats closer than this (about 210 bpm)
 #define ECG_MIN_PEAK_MV 40.0f    // ignore wiggles smaller than this
@@ -30,6 +33,9 @@
 #define HRV_MAX_RR 80            // intervals kept per window (160 bpm for 30 s)
 
 float skin_lm35_c(float mv);
+// The offset that makes `measured` read `reference`; false (and *offset untouched) if it's over
+// SKIN_TEMP_MAX_OFFSET_C or either value is outside 10-50 C
+bool skin_temp_offset(float measured, float reference, float *offset);
 bool skin_temp_plausible(float c);
 
 // --- R-peak detector -----------------------------------------------------------------------

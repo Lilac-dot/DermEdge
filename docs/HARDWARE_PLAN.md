@@ -218,7 +218,7 @@ activities.
 
 1. Train and test the scratch model on recordings (in progress), then the volunteer day.
 2. ECG (GPIO 32) and the LM35 (GPIO 35): **in the band firmware and on the website (31 Oct)**,
-   replacing GSR. Next: fix the LM35's wiring (its readings jumped between runs), record an
+   replacing GSR. Next: calibrate the LM35 once against a thermometer (`temp cal`), record an
    on-body ECG and check its heart rate against a reference (a chest strap or a pulse count),
    and train `web/models/stress_ecg.json` on WESAD's chest ECG.
 3. The hub's own dashboard page: the same Home tab, band connection and camera fix as the website.

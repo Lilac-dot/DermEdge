@@ -34,3 +34,9 @@ void skin_adc_start(QueueHandle_t out);
 void skin_set_sim(bool on);
 void skin_set_sim_stressed(bool on);
 void skin_set_debug(bool on);  // a line a second on the serial port: pins, values, verdicts
+// One-point LM35 calibration: with the sensor settled next to a reference thermometer reading
+// `reference_c`, averages the next 10 s and stores the offset in NVS. Blocks for 10 s. False if the
+// offset would be over 10 C (wiring, not inaccuracy) or the readings aren't steady.
+bool skin_temp_calibrate(float reference_c, float *offset, float *measured);
+void skin_temp_cal_clear(void);
+float skin_temp_cal_offset(void);

@@ -13,7 +13,10 @@ to paste in, and the diagram to place. Diagrams are in `docs/architecture/` (320
 - The **"GSR wristband"** is now the **DermEdge band**: an ESP32 on the back of the hand that
   detects scratching with a model trained on our recordings, over encrypted Bluetooth.
 - **Skin temperature is a stress input only** (one LM35, since 31 Oct; was a thermistor), not an eczema signal.
-- **31 Oct: ECG replaces GSR** for stress, and skin moisture is dropped. The stress model is being
+- **31 Oct: ECG replaces GSR** for stress, and skin moisture is dropped. The ECG is a seated 1-2
+  minute check with electrodes on both wrists (Lead I), not all-day wear; the research for and
+  against each sensor is in [SENSORS.md](SENSORS.md). The lesion-vs-healthy temperature pair is
+  dropped, so it's off the future-scope slide. The stress model is being
   retrained on WESAD's chest ECG; until its numbers are in, the GSR figures below are marked as
   the previous model and must be swapped or caveated before presenting.
 - **31 Oct: the skin model runs in tiers:** full CLIP model on laptops (WebGPU), a ~17 MB phone
@@ -87,7 +90,7 @@ Image score × trigger index → flare risk + tips → dashboard, band alert, do
 
 **1 INPUT**
 - Skin photo (phone or laptop camera)
-- DermEdge band: accelerometer (scratching); ECG and an LM35 skin-temperature sensor (stress, being added)
+- DermEdge band: accelerometer (scratching); a seated 1-2 minute ECG check (AD8232, electrodes on both wrists) and an LM35 wrist temperature (stress)
 - Journal, skin type
 
 **2 PROCESSING**
@@ -220,7 +223,7 @@ clinically validated yet.
 
 **IMPLEMENTATION ROADMAP**
 1. Person-by-person scratch test and the volunteer pilot
-2. ECG and the LM35 on the band, then the ECG stress model on live data
+2. An on-body ECG checked against a chest strap or pulse count, then the ECG stress model on live data
 3. Dermatologist validation study, then a 2-4 week wear study
 4. Off the breadboard: a PCB band
 
@@ -234,6 +237,5 @@ Beyond the finale build, kept so the work isn't lost:
   (Bayesian, like EczemaPred), replacing the fixed rule
 - **Finger-only scratching:** a low-noise vibration sensor to catch what motion misses (ADAM study)
 - **A second band** for the other hand
-- **Lesion-vs-healthy skin temperature:** only with dermatologist support and data that it tracks flares
 - **Clinic and teledermatology:** share reports with a doctor, with consent and a full DPDP Act privacy policy
 - **iPhone:** a native app, since iPhone browsers don't support Web Bluetooth

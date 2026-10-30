@@ -1005,6 +1005,9 @@ function renderBand(b) {
     tile("Scratch episodes", s.n, rec ? "this recording" : "last recording"),
     tile("Recorded", rec ? mmss(s.el) : "–", s.src === "touch" ? "started on the band" : "started here"),
     tile("Waiting to sync", s.q, s.q ? "readings on the band" : "all saved here"),
+    // the band's live heart rate while the ECG electrodes are on (older firmware sends no "ecg")
+    ...(s.ecg === undefined ? [] : [tile("Heart rate now", s.ecg && s.hr ? s.hr + " bpm" : "–",
+      s.ecg ? (s.hr ? "ECG, live" : "finding your beat…") : "ECG electrodes off")]),
   ].join("") : "";
   $("bandMove").hidden = !on || !s;
   if (on && s) {
@@ -1025,7 +1028,8 @@ function renderBand(b) {
   else if (b.sensorsAt !== bandSensorsSeen) { bandSensorsSeen = b.sensorsAt; loadBandSensors(); }
 }
 
-// the band's own sensors (GSR, skin temperature, moisture), scored in js/local-api.js
+// the band's own sensors (ECG heart rate and HRV, skin temperature; GSR and moisture from older
+// firmware), scored in js/local-api.js
 let bandSensorsSeen = 0, bandSensorChart;
 // the GSR model's threshold is 0.5 (stress_gsr.json); a calm wearer scores ~0.45
 function stressWord(p) { return p == null ? "–" : p < 0.5 ? "Calm" : p < 0.7 ? "Raised" : "High"; }
@@ -1034,16 +1038,26 @@ function bandSensorTiles(bs) {
   if (m.skin_conductance != null) t.push(
     tile("Stress (skin conductance)", calib ? "Calibrating" : stressWord(m.stress_p), calib ? m.calibration : `model output ${m.stress_p ?? "–"}`),
     tile("Skin conductance", m.skin_conductance + " µS", "GSR"));
-  if (m.skin_temp != null) t.push(tile("Skin temperature", m.skin_temp + " °C", "shown only, not used for stress"));
+  if (m.heart_rate != null) {
+    const hcal = m.hrv_calibration && m.hrv_calibration !== "done", vs = (v, u) => (v > 0 ? "+" : "") + v + " " + u + " vs your calm level";
+    t.push(tile("Heart rate, last 30 s", m.heart_rate + " bpm", m.hr_vs_calm != null ? vs(m.hr_vs_calm, "bpm") : "ECG, last 30 s"),
+      tile("Heart rate variability, last 30 s", m.rmssd + " ms", m.rmssd_vs_calm != null ? vs(m.rmssd_vs_calm, "ms") + " (RMSSD)" : "RMSSD; lower under stress"),
+      tile("Stress (ECG)", hcal ? "Calibrating" : m.ecg_model ? stressWord(m.ecg_stress_p) : "Not scored yet",
+        hcal ? m.hrv_calibration : m.ecg_model ? `model output ${m.ecg_stress_p ?? "–"}` : "the ECG stress model is coming"));
+  }
+  if (m.skin_temp != null) t.push(tile("Skin temperature", m.skin_temp + " °C", "wrist"));
   if (m.hydration_deficit != null) t.push(tile("Hydration deficit", m.hydration_deficit + "%", "eczema patch vs healthy skin"));
   return t.join("");
 }
 async function loadBandSensors() {
   const bs = (await (await fetch("/api/state")).json()).band_sensors;
   $("bandSensorTiles").innerHTML = bs.current ? bandSensorTiles(bs) : "";
-  const calib = bs.current && bs.markers.calibration && bs.markers.calibration !== "done";
+  const mk = bs.markers, ecgCalib = mk.hrv_calibration && mk.hrv_calibration !== "done";
+  const calib = bs.current && ((mk.calibration && mk.calibration !== "done") || ecgCalib);
   $("bandSensorNote").hidden = !calib;
-  $("bandSensorNote").textContent = "Sit still for the first 90 seconds of the recording, so the band can learn your calm level.";
+  $("bandSensorNote").textContent = ecgCalib
+    ? "With the ECG electrodes on, sit still with your hands resting for the first 90 seconds, so the band can learn your calm level."
+    : "Sit still for the first 90 seconds of the recording, so the band can learn your calm level.";
 }
 function timeChart(canvas, datasets, scales) {  // a line chart over time, in the page's colours
   const grid = { color: css("--line") }, ticks = { color: css("--muted"), font: { family: "Figtree" } };
@@ -1074,14 +1088,19 @@ function renderBandSensorCard(bs) {
   if (!has) return;
   $("bandSensorSource").textContent = bs.current ? "Live from your band" : `Last reading at ${new Date(bs.updated * 1000).toLocaleTimeString()}`;
   $("bandSensorTiles2").innerHTML = bandSensorTiles(bs);
-  const pts = bs.series;
+  // heart rate from the ECG band, or skin conductance from older GSR firmware
+  const ecg = bs.series.some(p => p.hr != null), pts = bs.series.filter(p => (ecg ? p.hr : p.gsr) != null);
   const datasets = [
-    { label: "Skin conductance (µS)", data: pts.map(p => ({ x: p.t * 1000, y: p.gsr })), yAxisID: "y",
-      borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .3, pointRadius: 0 },
+    ecg ? { label: "Heart rate (bpm)", data: pts.map(p => ({ x: p.t * 1000, y: p.hr })), yAxisID: "y",
+            borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .3, pointRadius: 2 }
+        : { label: "Skin conductance (µS)", data: pts.map(p => ({ x: p.t * 1000, y: p.gsr })), yAxisID: "y",
+            borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .3, pointRadius: 0 },
     { label: "Stress model output", data: pts.filter(p => p.stress != null).map(p => ({ x: p.t * 1000, y: p.stress })), yAxisID: "y1",
       borderColor: css("--deep"), backgroundColor: css("--deep"), borderDash: [5, 4], tension: .3, pointRadius: 0 },
   ];
-  if (!bandSensorChart) bandSensorChart = timeChart($("bandSensorChart"), datasets, { y: { title: "µS" }, y1: { position: "right", min: 0, max: 1 } });
+  const scales = { y: { title: ecg ? "bpm" : "µS" }, y1: { position: "right", min: 0, max: 1 } };
+  if (bandSensorChart && bandSensorChart.$ecg !== ecg) { bandSensorChart.destroy(); bandSensorChart = null; }
+  if (!bandSensorChart) { bandSensorChart = timeChart($("bandSensorChart"), datasets, scales); bandSensorChart.$ecg = ecg; }
   else { bandSensorChart.data.datasets = datasets; bandSensorChart.update(); }
 }
 
@@ -1098,7 +1117,8 @@ async function loadBandSessions() {
   });
 }
 
-// one recording: movement and scratching, skin conductance and temperature, moisture; CSV download
+// one recording: movement and scratching, heart rate and HRV, skin temperature (GSR and moisture
+// from older firmware); CSV download
 let svCharts = [], svData = null;
 function closeSession() { svCharts.forEach(c => c.destroy()); svCharts = []; svData = null; $("sessionView").hidden = true; }
 async function openSession(id) {
@@ -1122,7 +1142,18 @@ async function openSession(id) {
     { type: "scatter", label: "Scratch episode", data: s.scratch_events.map(e => ({ x: e.ts * 1000, y: e.intensity })), yAxisID: "y",
       pointStyle: "triangle", pointRadius: 7, backgroundColor: css("--bad"), borderColor: css("--bad") },
   ], { y: { min: 0, title: "g" } }));
-  if (s.gsr.length || s.skin_temp.length) svCharts.push(timeChart(section("Skin conductance and temperature"), [
+  const hrv = s.hrv || [];
+  if (hrv.length) svCharts.push(timeChart(section("Heart rate and heart rate variability (ECG)"), [
+    { label: "Heart rate (bpm)", data: xy(hrv, r => r.hr), yAxisID: "y", borderColor: css("--accent"),
+      backgroundColor: css("--accent"), tension: .2, pointRadius: 3 },
+    { label: "HRV, RMSSD (ms)", data: xy(hrv, r => r.rmssd), yAxisID: "y1", borderColor: css("--deep"),
+      backgroundColor: css("--deep"), borderDash: [5, 4], tension: .2, pointRadius: 3 },
+  ], { y: { title: "bpm" }, y1: { position: "right", min: 0, title: "ms" } }));
+  if (!s.gsr.length && s.skin_temp.length) svCharts.push(timeChart(section("Skin temperature"), [
+    { label: "Skin temperature (°C)", data: thin(xy(s.skin_temp, r => r.c)), yAxisID: "y", borderColor: css("--deep"),
+      backgroundColor: css("--deep"), tension: .2, pointRadius: 0 },
+  ], { y: { title: "°C" } }));
+  if (s.gsr.length) svCharts.push(timeChart(section("Skin conductance and temperature"), [
     { label: "Skin conductance (µS)", data: thin(xy(s.gsr, r => r.microsiemens)), yAxisID: "y", borderColor: css("--accent"),
       backgroundColor: css("--accent"), tension: .2, pointRadius: 0 },
     { label: "Skin temperature (°C)", data: thin(xy(s.skin_temp, r => r.c)), yAxisID: "y1", borderColor: css("--deep"),
@@ -1143,10 +1174,12 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sessio
 $("svCsv").onclick = () => {
   const s = svData;
   if (!s) return;
-  const cols = ["activity_g", "scratch_energy", "duration_s", "intensity", "microsiemens", "skin_temp_c", "moisture_patch", "moisture_reference"];
+  const cols = ["activity_g", "scratch_energy", "duration_s", "intensity", "heart_rate_bpm", "rmssd_ms", "sdnn_ms", "beats",
+                "microsiemens", "skin_temp_c", "moisture_patch", "moisture_reference"];
   const rows = [], add = (ts, kind, v) => rows.push([ts, kind, ...cols.map(c => v[c] ?? "")]);
   s.motion_summary.forEach(x => add(x.ts, "motion", { activity_g: x.activity, scratch_energy: x.scratch_energy }));
   s.scratch_events.forEach(x => add(x.ts, "scratch", { duration_s: x.duration_s, intensity: x.intensity }));
+  (s.hrv || []).forEach(x => add(x.ts, "hrv", { heart_rate_bpm: x.hr, rmssd_ms: x.rmssd, sdnn_ms: x.sdnn, beats: x.beats }));
   s.gsr.forEach(x => add(x.ts, "gsr", { microsiemens: x.microsiemens }));
   s.skin_temp.forEach(x => add(x.ts, "skin_temp", { skin_temp_c: x.c }));
   s.moisture.forEach(x => add(x.ts, "moisture", { moisture_patch: x.patch, moisture_reference: x.reference }));

@@ -187,6 +187,7 @@
     // (0.5): a calm wearer scores ~0.45 right after calibration and shouldn't count as a trigger
     const lm = live.markers;
     if (liveCurrent() && lm.stress_p != null) t['stress (band GSR)'] = clip((lm.stress_p - 0.5) / 0.3, 0, 1);
+    if (liveCurrent() && lm.ecg_stress_p != null) t['stress (band ECG)'] = clip((lm.ecg_stress_p - 0.5) / 0.3, 0, 1);
     if (liveCurrent() && lm.hydration_deficit != null) t['dry skin (band moisture patch)'] = clip(lm.hydration_deficit / 8, 0, 1);
     return t;
   }
@@ -212,8 +213,8 @@
     return { EDA_mean: m, EDA_std: Math.sqrt(avg(v.map(x => (x - m) ** 2))), EDA_min: mn, EDA_max: mx, EDA_range: mx - mn,
              EDA_slope: (den ? num / den : 0) / 4 };  // per second -> per sample at the E4's 4 Hz, as trained
   }
-  function gsrStress(f, profile) {
-    const g = gsrModel;
+  function gsrStress(f, profile, model) {  // also scores ECG features with stress_ecg.json
+    const g = model || gsrModel;
     const z = g.features.reduce((s, name, i) => {
       const k = name.replace(/_rel$/, '');
       return s + g.coef[i] * ((f[k] - profile[k]) - g.mean[i]) / g.scale[i];
@@ -239,7 +240,42 @@
     }
     L.series = L.series.concat({ t: end, gsr: +f.EDA_mean.toFixed(3), stress: m.stress_p ?? null, temp: m.skin_temp ?? null }).slice(-240);
   }
-  async function liveSensors(sessionId, gsr, temps, moist) {  // each sorted by ts
+  // ECG: the band sends one reading per 30 s of electrode contact with the hand still (heart rate,
+  // RMSSD, SDNN). The first 3 of a recording are the wearer's calm level; later ones are shown
+  // against it. Stress is scored only once a model exists: web/models/stress_ecg.json, in
+  // stress_gsr.json's format (features named <feature>_rel, relative to the calm level, from
+  // HR_mean, RMSSD, SDNN and TEMP_mean). Until then, heart rate and HRV are shown, not scored.
+  let ecgModel;  // undefined: not looked for yet; null: there isn't one
+  function hrvFeatures(x, temp) { return { HR_mean: x.hr, RMSSD: x.rmssd, SDNN: x.sdnn, TEMP_mean: temp ?? NaN }; }
+  async function liveHrv(L, hrv) {
+    const m = L.markers;
+    if (ecgModel === undefined) ecgModel = await realFetch('/models/stress_ecg.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    L.hrvCalib = L.hrvCalib || [];
+    L.hrvStress = L.hrvStress || [];
+    for (const x of hrv) {
+      const f = hrvFeatures(x, m.skin_temp);
+      if (!L.hrvProfile) {
+        L.hrvCalib.push(f);
+        m.hrv_calibration = `${L.hrvCalib.length}/3 calm readings`;
+        if (L.hrvCalib.length >= 3) {
+          L.hrvProfile = Object.fromEntries(Object.keys(f).map(k => [k, avg(L.hrvCalib.map(c => c[k]))]));
+          m.hrv_calibration = 'done';
+        }
+      } else if (ecgModel && ecgModel.features.every(n => Number.isFinite(f[n.replace(/_rel$/, '')]) && Number.isFinite(L.hrvProfile[n.replace(/_rel$/, '')]))) {
+        L.hrvStress = L.hrvStress.concat(gsrStress(f, L.hrvProfile, ecgModel)).slice(-3);
+        m.ecg_stress_p = +avg(L.hrvStress).toFixed(3);
+      }
+      L.series = L.series.concat({ t: x.ts, hr: x.hr, rmssd: x.rmssd, stress: m.ecg_stress_p ?? null, temp: m.skin_temp ?? null }).slice(-240);
+    }
+    const last = hrv[hrv.length - 1];
+    Object.assign(m, { heart_rate: Math.round(last.hr), rmssd: Math.round(last.rmssd), sdnn: Math.round(last.sdnn),
+                       ecg_model: !!ecgModel });
+    if (L.hrvProfile) {
+      m.hr_vs_calm = Math.round(last.hr - L.hrvProfile.HR_mean);
+      m.rmssd_vs_calm = Math.round(last.rmssd - L.hrvProfile.RMSSD);
+    }
+  }
+  async function liveSensors(sessionId, gsr, temps, moist, hrv = []) {  // each sorted by ts
     const L = liveFor(sessionId), m = L.markers;
     if (gsr.length) {
       gsrModel = gsrModel || await realFetch('/models/stress_gsr.json?v=3').then(r => r.json());
@@ -255,6 +291,7 @@
       if (!m.calibration) m.calibration = '0/3 calm windows';
     }
     if (temps.length) m.skin_temp = +avg(temps.map(x => x.c)).toFixed(2);
+    if (hrv.length) await liveHrv(L, hrv);
     const ref = moist.filter(x => x.reference > 0);
     if (ref.length) m.hydration_deficit = +((1 - avg(ref.map(x => x.patch)) / avg(ref.map(x => x.reference))) * 100).toFixed(1);
     L.updated = Date.now() / 1000;
@@ -300,6 +337,7 @@
       const kind = async k => (await tx('band_readings', 'readonly', st => st.index('session_kind').getAll(ofKind(s.id, k)))).sort((a, b) => a.ts - b.ts);
       out.scratch_events = (await kind('scratch')).map(r => ({ ts: r.ts, duration_s: r.duration_s, intensity: r.intensity }));
       out.motion_summary = (await kind('motion')).map(r => ({ ts: r.ts, activity: r.activity, scratch_energy: r.scratch_energy }));
+      out.hrv = (await kind('hrv')).map(r => ({ ts: r.ts, hr: r.hr, rmssd: r.rmssd, sdnn: r.sdnn, beats: r.beats }));
       out.gsr = (await kind('gsr')).map(r => ({ ts: r.ts, microsiemens: r.microsiemens }));
       out.skin_temp = (await kind('skin_temp')).map(r => ({ ts: r.ts, c: r.c }));
       out.moisture = (await kind('moisture')).map(r => ({ ts: r.ts, patch: r.patch, reference: r.reference }));
@@ -350,8 +388,11 @@
       const when = x => Math.min(Math.max(x.ts != null ? x.ts : x.t != null ? s.started_at + x.t : now, s.started_at), now);
       const scratches = (body.scratch_events || []).filter(e => e.duration_s >= 0 && e.intensity >= 0);
       const motion = (body.motion || []).filter(x => x.activity >= 0 && x.scratch_energy >= 0);
-      // the hub's limits (app/band.py): conductance 0-100 uS, skin temperature 10-50 C
+      // the hub's limits (app/band.py): conductance 0-100 uS, skin temperature 10-50 C; heart rate
+      // 25-220 bpm, RMSSD and SDNN 0-500 ms
       const byTs = (a, b) => a.ts - b.ts;
+      const hrv = (body.hrv || []).filter(x => x.hr >= 25 && x.hr <= 220 && x.rmssd >= 0 && x.rmssd <= 500 && x.sdnn >= 0 && x.sdnn <= 500)
+        .map(x => ({ ts: when(x), hr: +x.hr, rmssd: +x.rmssd, sdnn: +x.sdnn, beats: +x.beats || 0 })).sort(byTs);
       const gsr = (body.gsr || []).filter(x => x.microsiemens >= 0 && x.microsiemens <= 100).map(x => ({ ts: when(x), microsiemens: +x.microsiemens })).sort(byTs);
       const temps = (body.skin_temp || []).filter(x => x.c >= 10 && x.c <= 50).map(x => ({ ts: when(x), c: +x.c })).sort(byTs);
       const moist = (body.moisture || []).filter(x => Number.isFinite(x.patch)).map(x => ({ ts: when(x), patch: +x.patch,
@@ -359,13 +400,14 @@
       await tx('band_readings', 'readwrite', st => {
         scratches.forEach(e => st.add({ session_id: s.id, kind: 'scratch', ts: when(e), duration_s: +e.duration_s, intensity: +e.intensity }));
         motion.forEach(x => st.add({ session_id: s.id, kind: 'motion', ts: when(x), activity: +x.activity, scratch_energy: +x.scratch_energy }));
+        hrv.forEach(x => st.add({ session_id: s.id, kind: 'hrv', ...x }));
         gsr.forEach(x => st.add({ session_id: s.id, kind: 'gsr', ...x }));
         temps.forEach(x => st.add({ session_id: s.id, kind: 'skin_temp', ...x }));
         moist.forEach(x => st.add({ session_id: s.id, kind: 'moisture', ...x }));
       });
       scratches.forEach(e => bandScratch(when(e)));
-      if (gsr.length || temps.length || moist.length) await liveSensors(s.id, gsr, temps, moist);
-      return json({ stored: { scratch_events: scratches.length, motion: motion.length, gsr: gsr.length, skin_temp: temps.length, moisture: moist.length },
+      if (hrv.length || gsr.length || temps.length || moist.length) await liveSensors(s.id, gsr, temps, moist, hrv);
+      return json({ stored: { scratch_events: scratches.length, motion: motion.length, hrv: hrv.length, gsr: gsr.length, skin_temp: temps.length, moisture: moist.length },
                     alert: await bandAlertCheck(s.id) });
     }
     if ((m = p.match(/^\/api\/band\/sessions\/(\d+)$/))) {

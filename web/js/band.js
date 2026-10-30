@@ -18,7 +18,7 @@
     name: null, id: null, status: null, error: null,
     alert: null,         // the newest undismissed alert, as sent to the band
     sessionsChanged: 0,  // bumps when a recording starts or stops, for the page to reload its list
-    sensorsAt: 0,        // when GSR, skin temperature or moisture readings last arrived (ms)
+    sensorsAt: 0,        // when heart, skin temperature, GSR or moisture readings last arrived (ms)
   };
   const listeners = new Set();
   const emit = () => listeners.forEach(f => { try { f(st); } catch (e) { console.error(e); } });
@@ -30,9 +30,10 @@
   const api = (url, body) => fetch(url, body === undefined ? undefined : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 
-  // reading types the band can send, each a list of {t, ...}; gsr, skin_temp and moisture arrive
-  // as those sensors are wired (docs/DERMEDGE_APP_GUIDE.md, "Relay readings")
-  const SENSOR_KEYS = ['motion', 'scratch_events', 'gsr', 'skin_temp', 'temperatures', 'moisture'];
+  // reading types the band can send, each a list of {t, ...}: hrv (ECG heart rate and HRV, one per
+  // 30 s) and skin_temp from the current band; gsr and moisture from older firmware
+  // (docs/DERMEDGE_APP_GUIDE.md, "Relay readings")
+  const SENSOR_KEYS = ['motion', 'scratch_events', 'hrv', 'gsr', 'skin_temp', 'temperatures', 'moisture'];
 
   // ---------- recordings: band r -> session id ----------
   // A band reboot restarts r at 1, so the map belongs to one connection's run of status messages.
@@ -86,12 +87,13 @@
         const live = lastStatus && lastStatus.r === r && lastStatus.s === 'recording' ? lastStatus : null;
         const maxT = Math.max(0, ...items.flatMap(m => SENSOR_KEYS.flatMap(k => m[k] || []).map(x => x.t)));
         const rec = await session(r, live ? live.el : maxT + 1, live ? live.src : 'touch', live ? live.label : 'day');
-        const body = { scratch_events: [], motion: [], gsr: [], skin_temp: [], moisture: [] };
+        const body = { scratch_events: [], motion: [], hrv: [], gsr: [], skin_temp: [], moisture: [] };
         for (const m of items) {
           // absolute times: the band only knows seconds since its recording started
           const ts = x => rec.startedAt + x.t;
           for (const e of m.scratch_events || []) body.scratch_events.push({ ts: ts(e), duration_s: e.duration_s, intensity: e.intensity });
           for (const x of m.motion || []) body.motion.push({ ts: ts(x), activity: x.activity, scratch_energy: x.scratch_energy });
+          for (const x of m.hrv || []) body.hrv.push({ ts: ts(x), hr: x.hr, rmssd: x.rmssd, sdnn: x.sdnn, beats: x.beats });
           for (const x of m.gsr || []) body.gsr.push({ ts: ts(x), microsiemens: x.microsiemens });
           // one skin temperature for the stress model; `temperatures` is the hub's older pair shape
           for (const x of m.skin_temp || []) body.skin_temp.push({ ts: ts(x), c: x.c });
@@ -102,7 +104,7 @@
         if (res.detail) { console.warn('band: readings refused:', res.detail); continue; }  // e.g. the session was stopped elsewhere
         if (res.alert) await showAlert(res.alert);
         if (body.scratch_events.length) set({ sessionsChanged: st.sessionsChanged + 1 });
-        if (body.gsr.length || body.skin_temp.length || body.moisture.length) set({ sensorsAt: Date.now() });
+        if (body.hrv.length || body.gsr.length || body.skin_temp.length || body.moisture.length) set({ sensorsAt: Date.now() });
       } catch (e) {
         console.warn('band: relaying readings failed, retrying', e);
         queue.unshift(...items);  // keep them for the next flush

@@ -11,6 +11,8 @@ Newest first. Each decision is reflected in the sections below.
 
 | Date | Decision | Why |
 |---|---|---|
+| 31 Oct 2026 | **ECG replaces GSR as the stress sensor; skin moisture is dropped.** The band's sensors are now the ADXL345 (scratching), ST7735 screen, capacitive touch pad, ECG (stress) and LM35 (skin temperature) on the ESP32 (Tishya). The stress model is retrained on WESAD's chest ECG (heart rate and HRV) with wrist temperature and motion. | Tishya's call. WESAD recorded chest ECG on the same 15 subjects, so the model can be retrained without new data. The pitch deck's GSR model figures no longer describe the band once this lands. |
+| 31 Oct 2026 | **LM35, not the NTC thermistor** (reverses 25 Oct). Still one sensor, for the stress model. | Tishya's call. The LM35 is linear (10 mV/°C, no lookup) and needs only one pin. It runs on 5V; its output stays under 0.4 V at skin temperature, safe for the ADC. |
 | 26 Oct 2026 | **The pitch deck is rebuilt around this plan** ([PITCH_DECK.md](PITCH_DECK.md)): phone or laptop camera, the DermEdge band, a future-scope slide. It quotes the band's GSR stress model (90% accuracy, 73% of stress caught), not the four-signal LightGBM's AUC 0.92-0.94. | The old deck still showed the ESP32-CAM and the Wi-Fi wristband. The LightGBM called 50% of WESAD's meditation and amusement windows stress, so its AUC overstates it (`scripts/train_gsr_stress.py`). |
 | 25 Oct 2026 | **The website moves from pink to a teal theme** (accent `#0F7C74`), light on every device (it no longer follows the device's dark mode); pink and red are kept for alerts. The band's screen palette follows (Tishya). Tokens in `web/index.html`, listed in [DERMEDGE_APP_GUIDE.md](DERMEDGE_APP_GUIDE.md#design). | The skin photos are pink, so a pink interface hid them and made buttons look like alerts. Teal reads as clinical, contrasts with red rashes, and avoids a "skin-coloured" theme that implies light skin. |
 | 25 Oct 2026 | **The scratch model uses motion features only, for now.** The band still samples at 800 Hz and computes the vibration features, for a better sensor later. | On the first recordings, the ADXL345's noise at 800 Hz (14-22 mg) buried the skin vibration: vibration features alone scored at chance on the held-out round and made the combined model worse. Motion alone found every scratch clip with no false episodes. |
@@ -32,7 +34,7 @@ stays near zero without eczema in the photo. The Wearable tab shows trigger aler
 
 Both diagrams were redrawn on 26 Oct 2026 for the current plan (`scripts/draw_architecture.py`):
 the band's scratch detector and GSR stress model, skin temperature as a planned stress input, and
-the ESP32-CAM as future scope. Scratch episodes feed the trigger "scratching (DermEdge band)", at
+the ESP32-CAM as future scope. They predate the 31 Oct switch from GSR to ECG and still show GSR. Scratch episodes feed the trigger "scratching (DermEdge band)", at
 full strength at 30 episodes in 8 hours.
 
 ![The DermEdge band: scratch detection](architecture/6_band_scratch.png)
@@ -58,7 +60,7 @@ The other diagrams: [stage 1](architecture/1_stage1_clip_rash.png),
 
 - **Band:** records sessions started from its touch pad or the app, detects scratch episodes,
   and keeps about 20 hours of readings in its flash while disconnected (a 2.4 MB partition; they
-  survive a restart; when it fills, new motion and GSR thin out before any scratch is lost).
+  survive a restart; when it fills, new motion and sensor readings thin out before any scratch is lost).
 - **Website (Vercel):** pairs with the band from the Home tab, relays its readings into recording
   sessions stored in the browser, feeds scratching into the flare risk, and sends high-risk
   alerts back to the band's screen (a double tap there dismisses them on both).
@@ -72,6 +74,8 @@ The other diagrams: [stage 1](architecture/1_stage1_clip_rash.png),
 | 1.8" ST7735 TFT, red V1.1 board | working | VCC on **5V** (its regulator starves the panel on 3V3: white screen); RGB order (pink showed as lilac in BGR) |
 | Add-on board: ADXL345 accelerometer | working, 800 Hz | CS to 3V3 (I2C mode) and SDO to GND (address 0x53), or it drops off the bus |
 | Add-on board: 4-pad touch module (OUT1-OUT4) | OUT1 working | Hold 2 s: start/stop, tap: next view, double tap: dismiss. OUT2-4 could become real buttons if pins allow |
+| LM35 temperature sensor | to wire | Skin temperature for the stress model. +Vs on **5V** (needs at least 4 V), output on GPIO 35 |
+| ECG module (AD8232 assumed, to confirm) | to wire | Stress, from heart rate and HRV. Electrode placement still to decide (§5) |
 | Add-on board: gesture and ultrasonic sensors | not used | The ultrasonic's echo is 5V: it needs a divider before any ESP32 pin |
 
 **Where to wear it:** the add-on board on the **back of the hand** you scratch with, flat and
@@ -85,12 +89,13 @@ snug, the same way round every time. Scratch vibration is strongest there and fa
 | 5 | TFT CS | |
 | 16 | TFT A0 | not 2 (onboard LED), not 21 (I2C) |
 | 4 | TFT RESET | |
-| 21, 22 | I2C SDA, SCL: ADXL345 (and MAX30100 if added) | the ESP32's default I2C pins |
+| 21, 22 | I2C SDA, SCL: ADXL345 | the ESP32's default I2C pins |
 | 27 | touch pad OUT1 | |
-| 34 | **planned:** skin temperature thermistor (stress model) | ADC1, input only |
-| 35 | spare ADC1 (was the lesion-vs-healthy pair's second thermistor, now future scope) | ADC1, input only |
-| 32 | **planned:** GSR | ADC1 |
-| 33 | **planned:** skin moisture, if the parts arrive | ADC1 |
+| 35 | **planned:** LM35 skin temperature | ADC1, input only |
+| 36 (VP) | **planned:** ECG OUTPUT | ADC1, input only |
+| 39 (VN), 34 | **planned:** ECG LO+, LO− (lead-off detect) | input only, digital |
+| 33 | **planned:** ECG SDN (sleeps the module when not recording) | output |
+| 32 | spare ADC1 (a second LM35 if the lesion-vs-healthy pair comes back) | ADC1 |
 | 26, 25, 13 | spare: touch OUT2-4 if wanted | |
 
 Rules behind it: analog sensors go on **ADC1** pins (32-39), because ADC2 stops working while
@@ -100,36 +105,42 @@ TFT's RESET, so that plan (in `archive/gsr_wristband_wifi/HARDWARE_GUIDE.md`) no
 
 ## 5. Sensors: what's coming
 
-### GSR (stress)
-Skin conductance on GPIO 32, using the archived wristband's code (`archive/gsr_wristband_wifi/main/signals.c`)
-and the WESAD stress model (LightGBM, calibrated on the wearer's first calm minutes). GSR is much
-stronger on the fingers or palm than the wrist, so finger electrodes are worth it.
+### ECG (stress)
+Replaces GSR (31 Oct). The stress model is retrained on WESAD's chest ECG (700 Hz RespiBAN,
+same 15 subjects): heart rate and HRV features with wrist temperature and motion, calibrated on
+the wearer's first calm minutes as before. Compare it against the GSR model on the same
+leave-one-subject-out split, so we know what dropping GSR costs.
+- **Module:** AD8232 assumed (to confirm). OUTPUT to GPIO 36, LO+ / LO− to 39 / 34, SDN to 33,
+  powered from 3V3.
+- **Electrodes, still to decide:** ECG needs electrodes on opposite sides of the heart, so the
+  band alone can't record it. Either sticky pads or a chest strap wired to the band (continuous,
+  and where WESAD's ECG was recorded), or a 1-2 minute check with a finger of the other hand on a
+  pad on top of the band (on demand, not continuous).
+- **On the band:** R-peak detection and HR/HRV per window, sent over BLE; the raw trace stays on
+  the band (about 250 Hz would swamp the link). Lead-off pins blank the reading when an
+  electrode slips.
+- **API:** new `ecg` / `hr` readings and a hub table; GSR and moisture go. Documented for the
+  website and app before the firmware lands.
 
-### Skin temperature (with GSR, for the stress model)
-**One** sensor, under the band and taped flat to the skin. It feeds the stress model only, which
-was trained on the E4 wristband's skin temperature (it drops slightly under stress). It is **not**
-an eczema or flare signal: dermatologists told us skin temperature is too variable for that.
-- **10 kΩ NTC thermistor** (B3950 is common) in a divider: 3V3 → 10 kΩ resistor → GPIO 34 →
-  thermistor → GND. At skin temperature the pin sits around 1.3-1.5 V. Use 3V3, not 5V.
-- The archived wristband already has the conversion (B-value equation, 32 reads averaged per
-  sample, start-up range check): `archive/gsr_wristband_wifi/main/signals.c`, `signals_temp()`.
-  It comes into the band together with the GSR code.
-- Keep it away from the ESP32's own heat and let it settle a minute. Absolute accuracy is about
-  ±0.5-1 °C, which is fine: the model works on changes from the wearer's calm baseline.
+### Skin temperature: LM35 (with ECG, for the stress model)
+**One** sensor, under the band and taped flat to the skin. It feeds the stress model only (skin
+temperature drops slightly under stress); it is **not** an eczema or flare signal, as
+dermatologists told us skin temperature is too variable for that.
+- Flat side facing you, legs down: left (+Vs) to **5V**, middle (Vout) to **GPIO 35**, right to GND.
+- 10 mV/°C, so skin (30-36 °C) gives 0.30-0.36 V. Read with 0 dB attenuation for the best
+  resolution and average several reads per sample.
+- The TO-92 package touches skin poorly and responds slowly: a dab of thermal paste or a small
+  copper disc on the flat face helps. Keep it away from the ESP32's own heat and let it settle a
+  minute. The model works on changes from the wearer's calm baseline, so absolute accuracy matters less.
 - Known limit: WESAD was recorded indoors. Walking outside or into air conditioning also drops
   skin temperature, which the model could read as stress.
-- API: the hub's `temperatures` field (`lesion_c`, `reference_c`) was designed for the pair. The
-  stress model needs one skin temperature per sample in the same windows as GSR, so that field
-  changes when GSR is added.
+- API: the hub's `temperatures` field (`lesion_c`, `reference_c`) was designed for the pair; the
+  stress model needs one skin temperature per sample in the same windows as the ECG.
 
-### MAX30100 (optional)
-Relevant: the stress model was trained on PPG (pulse) as well as GSR, and stress lowers heart rate
-variability. But it's motion-sensitive on the hand, and many purple MAX30100 boards pull I2C up to
-1.8 V, which the ESP32 reads unreliably (take its pull-ups off and use 4.7 kΩ to 3V3). GSR first.
-
-### Skin moisture (maybe)
-A patch on the eczema site and one on healthy skin, on GPIO 33. Eczema skin read lower in all 13
-patients of the Southampton e-textile study the website's simulator replays.
+### Dropped
+- **GSR:** replaced by ECG (31 Oct).
+- **Skin moisture:** dropped with GSR.
+- **MAX30100 (PPG):** not needed; the ECG gives heart rate and HRV directly.
 
 ## 6. Scratch detection
 
@@ -196,8 +207,8 @@ activities.
 ## 8. Roadmap
 
 1. Train and test the scratch model on recordings (in progress), then the volunteer day.
-2. GSR on GPIO 32 and the skin-temperature thermistor on GPIO 34, with the stress model;
-   MAX30100 if wanted.
+2. ECG (GPIO 36) and the LM35 (GPIO 35), with the stress model retrained on WESAD's chest ECG.
+   Decide the electrode placement first.
 3. The hub's own dashboard page: the same Home tab, band connection and camera fix as the website.
 4. Off the breadboard: perfboard, then a PCB.
 
@@ -206,7 +217,7 @@ activities.
 Not part of the finale build; kept so the work isn't lost.
 - **ESP32-CAM on-device screen** (`firmware_dermedge/esp32cam_screen/`): a 300 KB INT8 model
   that screens photos on the camera itself. It builds, but hasn't run on a board.
-- **Lesion-vs-healthy temperature pair:** two thermistors, one on the lesion and one on healthy
+- **Lesion-vs-healthy temperature pair:** two LM35s (the second on GPIO 32), one on the lesion and one on healthy
   skin, with the difference as a flare signal. Revisit only with dermatologist support and
   data showing it tracks flares.
 - **A second band** for the other hand, so scratching with either hand is seen.

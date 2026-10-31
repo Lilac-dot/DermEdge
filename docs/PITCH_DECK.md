@@ -257,8 +257,9 @@ Three boxes, said left to right as steps: measure more, then smarter models, the
 | What dermatologists check, recorded every day | Flare model, once doctors label band data | 300 KB camera on the band |
 | Optical heart sensor: no electrodes | Dermatologist-validated severity scores | Clinic partnerships, with consent; a smaller PCB band |
 
-Closing line on the slide: **Private, fair eczema care at home.** None of these exist yet (the
-17 MB and 300 KB models are trained but not shipped); say "next", never "we have".
+Closing line on the slide: **Private, fair eczema care at home.** None of these are in the product yet
+(the 300 KB camera model is trained; the 17 MB phone model has a training script ready); say
+"next", never "we have".
 
 Close: *"DermEdge brings private, fair eczema care home: a check in seconds, tracking in between,
 and data your doctor can act on."*

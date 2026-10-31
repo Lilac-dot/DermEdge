@@ -2,9 +2,11 @@
 
 **The deck in Canva:** https://canva.link/sjz2ti8lsuddh4j (the team's working copy; this file has its text).
 
-Rewritten 31 Oct 2026 for the finale format: **10 minutes in total, including a 3-5 minute demo
-video.** That leaves about 5-6 minutes of talking, so the deck is 12 slides plus the video, about
-30 seconds per slide. Diagrams are in `docs/architecture/` (3200 × 1800 PNG); the `v2_*` ones are this deck's,
+Rewritten 31 Oct 2026 for the finale format: **10 minutes in total, including the demo video.**
+The video is 41 seconds (skin check only, no sound: we talk over it), so the deck is 16 slides,
+about 35 seconds each. Slides carry short bullets only; everything to say out loud is in each
+slide's **speaker notes in Canva** (the Notes button under the slide, or Presenter view; the PPTX
+export keeps them in the notes pane). Diagrams are in `docs/architecture/` (3200 × 1800 PNG); the `v2_*` ones are this deck's,
 redrawn by `python scripts/draw_pitch_v2.py`.
 
 **What changed since the 26 Oct draft**
@@ -17,6 +19,10 @@ redrawn by `python scripts/draw_pitch_v2.py`.
 - **The phone model is dropped for the finale.** The full model now loads on phones (WebAssembly),
   so the 17 MB phone model is future scope.
 - **New slides:** the old vs new model, hardware and biomarkers, and DermEdge vs the market.
+- **31 Oct night:** a "Why DermEdge is different" slide (what's missing today vs what DermEdge
+  does), Impact and Future scope split into two slides so impact gets a full slide, Nitish's demo
+  video on slide 5, and a QR code for derm-edge.vercel.app on the closing slide
+  (`docs/demo/dermedge_site_qr.png`).
 
 Footer for every slide: **Telemedicon 2026 · Finale · MGUMST Jaipur** (check the organisers'
 exact name for the round).
@@ -27,13 +33,15 @@ exact name for the round).
 |---|---|
 | 0:00 | 1 Title, 2 Problem |
 | 1:00 | 3 Solution |
-| 1:30 | **Demo video, 3-5 min** (slide 4 is its title card) |
-| 5:30 | 5 Architecture, 6 Old vs new, 7 Stages 1-2, 8 Stage 3 |
-| 7:15 | 9 Hardware and biomarkers, 10 Data to diagnosis |
-| 8:30 | 11 Results, 12 DermEdge vs the market |
-| 9:30 | 13 Impact and future scope, close |
+| 1:30 | 4 Why DermEdge is different |
+| 2:15 | 5 **Demo video, 41 s**, narrated live |
+| 3:15 | 6 Architecture, 7 Old vs new, 8 Stages 1-2, 9 Stage 3 |
+| 5:20 | 10 The band, 11 Data to diagnosis |
+| 6:40 | 12 Results, 13 DermEdge vs the market |
+| 8:00 | 14 **Impact** (slow down: this is what the judges score), 15 Future scope |
+| 9:20 | 16 Thank you + QR code, questions |
 
-If the video runs 5 minutes, merge slides 7 and 8, and say slide 10 in one sentence.
+If time runs short, say slide 11 in one sentence and skip the detail on slide 9.
 
 ---
 
@@ -68,34 +76,41 @@ no scratching or stress data, and the apps that exist upload photos to the cloud
 - **Tracks every body site over time**, with treatments, triggers and a printable doctor report
 - **Private:** no photo leaves the device; works offline once installed
 
-## 4. Demo (video, 3-5 minutes)
+## 4. Why DermEdge is different
 
-Title card: **"DermEdge in action"**. Two parts, recorded separately:
+Title: **WHY DERMEDGE IS DIFFERENT**. Four boxes, each "what's missing today" then "what DermEdge does":
 
-**Part A: the skin check (website, phone)**
-1. Open derm-edge.vercel.app on a phone, show the install as an app
-2. Point the camera at healthy skin: "No rash"
-3. Show an eczema photo: rash → eczema → severity band; on a laptop, the heatmap
-4. The History tab: one body site improving over time; open the doctor report
+| Box | Today | DermEdge |
+|---|---|---|
+| **Between visits** | Nothing records the weeks between visits | Photo history and band data in one doctor report |
+| **On brown skin** | Most skin AI is trained on lighter skin | 84% of rashes caught on South Asian photos (was 33%) |
+| **Look-alikes** | Psoriasis, tinea and scabies get mistaken for eczema | Flags look-alikes and says "see a doctor" |
+| **Private and offline** | Skin apps upload your photos to the cloud | Runs on your phone, offline; no photo leaves it |
 
-**Part B: the band receiving sensor data**
-1. The band powering on, pairing over Bluetooth with the 6-digit code on its screen
-2. Start a recording from the band's touch pad
-3. Scratching: the band detects an episode, the website's count goes up
-4. ECG check (electrodes on both wrists) and skin temperature arriving in the website live
-5. A flare alert sent to the band's screen, dismissed with a double tap
+Say it as "Today... DermEdge...". Never "the best": say "built and tested for South Asian skin".
 
-Keep the website's sensor charts on screen for a few seconds: that's the "data a doctor can read"
-moment for slide 10.
+## 5. Demo (video, 41 seconds)
 
-## 5. System architecture
+Video: [`docs/demo/DermEdge_demo_partA.mp4`](demo/DermEdge_demo_partA.mp4), on the slide under the
+title "DermEdge in action" (subtitle: the skin check on a phone, then three photos on a laptop).
+No sound, captions only: we narrate it live (script in the slide's speaker notes).
+
+1. DermEdge installed on a phone like an app: runs fully on the phone, no photo uploaded
+2. Healthy skin: "No rash detected"
+3. A rash, captured automatically in about 2 seconds: eczema (89%), moderate severity
+4. Laptop, three labelled uploads: eczema on darker skin → likely eczema + heatmap; fungal
+   infection → look-alike; psoriasis → look-alike, see a doctor
+
+The band is not filmed: show the band itself on slide 10 (photo + the website's sensor readings).
+
+## 6. System architecture
 
 Diagram: `docs/architecture/v2_0_full_system.png`
 
 Caption: Two paths, one device. The camera path answers rash, eczema and severity; the band path
 records scratching and stress; both meet in a daily flare risk and the doctor report.
 
-## 6. How the skin model evolved
+## 7. How the skin model evolved
 
 Diagram: `docs/architecture/v2_1_old_vs_new.png`
 
@@ -104,7 +119,7 @@ photos from South Asia, it struggled. So we rebuilt it: one shared CLIP pass wit
 heads, retrained with South Asian hospital photos. It now catches 84% of those rashes instead of
 33%, and works as well on darker skin as on lighter skin."*
 
-## 7. Stages 1 and 2: rash, then eczema vs look-alikes
+## 8. Stages 1 and 2: rash, then eczema vs look-alikes
 
 Diagrams: `docs/architecture/v2_2_stage1_rash.png` and
 `docs/architecture/v2_3_stage2_eczema.png` (the occlusion heatmap is in stage 2). Use one per half of the slide, or two
@@ -116,14 +131,14 @@ Captions:
 - Stage 2: AUC 0.87 on South Asian hospital photos; on par with dermatology foundation models
   (DermLIP, PanDerm) in our head-to-head test.
 
-## 8. Stage 3: severity
+## 9. Stage 3: severity
 
 Diagram: `docs/architecture/3_stage3_severity.png` (unchanged)
 
 Caption: The same CLIP embedding, a third head: four EASI signs scored 0-12. Within one severity
 band 97.6% of the time; mean error 1.2 points.
 
-## 9. The hardware: the DermEdge band
+## 10. The hardware: the DermEdge band
 
 Photo of the band on the breadboard, plus `docs/architecture/v2_5_band_data_loop.png` (sensors → Bluetooth → record → doctor
 reviews → data pools → models learn, with the Southampton evidence box).
@@ -144,7 +159,7 @@ From this data we built a threshold classifier (eczema patch drier than the same
 skin) that flags eczema skin in **13 of 13 patients**. So a wearable reading of skin barrier
 biomarkers can detect eczema, and this is the basis for a moisture patch on a future band.
 
-## 10. From data to diagnosis
+## 11. From data to diagnosis
 
 **TODAY: THE BAND COLLECTS THE DATA**
 No public dataset pairs our sensors (scratching, ECG, skin temperature) with eczema outcomes. So
@@ -158,10 +173,10 @@ Every recording a doctor reviews becomes labelled data: this night, this flare, 
 Once enough data pools up, a model learns the patterns, as we did for scratching from our own
 recordings and for skin barrier readings from the Southampton study. The doctor then only confirms.
 
-Visual: the loop in `docs/architecture/v2_5_band_data_loop.png` (shared with slide 9), or three steps left to right:
+Visual: the loop in `docs/architecture/v2_5_band_data_loop.png` (shared with slide 10), or three steps left to right:
 **Collect → Doctor validates → Model automates**.
 
-## 11. Results
+## 12. Results
 
 | What | Result | How we tested |
 |---|---|---|
@@ -173,7 +188,7 @@ Visual: the loop in `docs/architecture/v2_5_band_data_loop.png` (shared with sli
 | Scratch detection | 22 of 26 scratch clips, 14 false alarms in 73 others | 7 people, each tested by a model that never saw them |
 | Skin barrier biomarker | Eczema skin drier in **13 of 13** patients | Southampton e-textile study |
 
-## 12. DermEdge vs the market
+## 13. DermEdge vs the market
 
 Chart: `docs/architecture/v2_6_results_vs_market.png` (AUC bars, with the different-task footnote).
 
@@ -195,24 +210,39 @@ Footnote on the slide (small): *Google figures: 79 skin conditions, US tele-derm
 (MedGemma technical report, arXiv 2507.05201, Table 15): a different task. DermLIP: our head-to-head on SkinDisNet with the same heads.
 Different datasets, so a guide, not a contest.*
 
-## 13. Impact and future scope
+## 14. Impact
 
-**IMPACT**
-Earlier, fairer eczema checks at home, built to work on South Asian skin, and doctor visits
-informed by data from the days in between.
+- 204 million people live with eczema; 8.5% of Central Indian school children
+- Free on any phone browser: no app store, no servers, works offline
+- Built and tested for South Asian skin, not just lighter skin
 
-**FUTURE SCOPE**
-- **Sensor-trained flare model:** once doctors have labelled enough band recordings, scratching,
-  stress and temperature feed a learned model instead of a fixed rule
-- **Moisture patch** on the band, using the Southampton biomarker finding
-- **A 17 MB phone model** that copies the full model, for low-end phones (training script ready;
-  `docs/architecture/v2_4_device_tiers.png`)
-- **On-device camera:** a 300 KB model on an ESP32-CAM, already trained
-- **Clinic partnerships:** share reports with a doctor, with consent, under the DPDP Act
+**WHAT CHANGES**
+- **Patients:** a private check in seconds, at home
+- **Families:** know when to see a doctor, and what to show
+- **Doctors:** photos, scratching and heart data from between visits
+- **Areas with few dermatologists:** a first check that costs nothing
+
+Screening aid, not a diagnosis (say it in the notes, not on the slide).
+
+## 15. Future scope
+
+- **Sensor-trained flare model,** once doctors label band recordings
+- **Moisture patch** on the band (Southampton finding)
+- **Dermatologist validation** of the severity scores
+
+**REACHING MORE PEOPLE**
+- **17 MB phone model** for low-end phones (training script ready; `docs/architecture/v2_4_device_tiers.png`)
+- **300 KB on-device camera** (ESP32-CAM, already trained)
+- **Clinic partnerships:** reports shared with consent (DPDP Act)
 - A PCB band instead of the breadboard
 
 Close: *"DermEdge brings private, fair eczema care home: a check in seconds, tracking in between,
 and data your doctor can act on."*
+
+## 16. Thank you
+
+"Team DermEdge · derm-edge.vercel.app", with the QR code for the site
+(`docs/demo/dermedge_site_qr.png`). Leave it up during questions.
 
 ---
 

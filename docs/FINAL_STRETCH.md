@@ -12,7 +12,13 @@ audio; we talk over it live). It shows the phone app (healthy skin → no rash, 
 automatically → eczema + severity), then the laptop with three labelled uploads: eczema on darker
 skin → likely eczema + heatmap, fungal infection → look-alike, psoriasis → look-alike.
 **The band is not filmed.** Shreeya puts Tishya's photo of the band and screenshots of the
-website's band / sensor readings straight onto the hardware slides (9-10) instead of a video.
+website's band / sensor readings straight onto the hardware slides (10-11) instead of a video.
+
+**Deck, done (31 Oct night):** 16 slides in Canva. New slide 4 "Why DermEdge is different"
+(today vs DermEdge, four boxes), the video on slide 5, Impact (14) and Future scope (15) as
+separate slides, and the site QR code on the Thank you slide. Slides are short bullets only;
+everything to say is in each slide's **speaker notes in Canva** (Notes button under the slide,
+or Present → Presenter view; the PPTX export keeps them).
 
 **The story for the sensors (decided):** we don't train or show a model on our own sensors. The
 band **collects data for the doctor** (scratching, heart rate and HRV from the ECG, skin
@@ -31,7 +37,7 @@ on our own recordings (22 of 26 scratch clips, 7 people).
 | 2 | now, ~1 h | Shreeya | Build the slides in Canva from PITCH_DECK.md (below) |
 | 2 | now, ~45 min | Nitish | Phone + laptop checks, then record video part A |
 | 2 | now, ~1.5 h | Tishya | Band on the body, then record video part B |
-| 3 | after videos | Nitish | Edit parts A + B into one 3-5 min video, drop it into slide 4 |
+| 3 | ~~after videos~~ | Nitish | ~~Edit the video~~ Done: part A only (41 s), on slide 5 |
 | 4 | after slides | all | Two timed run-throughs of the full 10 minutes |
 | 5 | before sleeping | all | Study your Q&A area (below) |
 | 6 | morning | all | Day-of checklist (bottom) |
@@ -40,7 +46,7 @@ on our own recordings (22 of 26 scratch clips, 7 people).
 
 ## Shreeya: the slides (Canva)
 
-**Source:** every slide's text is in [PITCH_DECK.md](PITCH_DECK.md), sections 1-13, with the
+**Source:** every slide's text is in [PITCH_DECK.md](PITCH_DECK.md), sections 1-16, with the
 timing table at the top. Put on the slides only what's under each slide heading. The section
 "For questions from judges" is **not** for slides; it's our Q&A crib.
 
@@ -49,7 +55,7 @@ paste this, with the repo's files attached or pasted in:
 
 > Open my Canva design https://canva.link/sjz2ti8lsuddh4j. First list every page with its current
 > text, and don't change anything yet. Then, page by page, replace the text with the matching
-> section of the PITCH_DECK.md I'm giving you (sections 1-13; skip "For questions from judges").
+> section of the PITCH_DECK.md I'm giving you (sections 1-16; skip "For questions from judges").
 > Keep the design's fonts, colours and layout; one idea per slide; no paragraph longer than two
 > lines. Add a page if a section has none. Show me each page before moving to the next.
 
@@ -57,14 +63,14 @@ Then upload the images and place them (Canva connector upload, or drag them in b
 
 | Slide | Image (docs/architecture/) |
 |---|---|
-| 5 System architecture | `v2_0_full_system.png` |
-| 6 How the skin model evolved | `v2_1_old_vs_new.png` |
-| 7 Stages 1 and 2 | `v2_2_stage1_rash.png`, `v2_3_stage2_eczema.png` |
-| 8 Stage 3 severity | `3_stage3_severity.png` (still current) |
-| 9 Hardware | a photo of the band on the breadboard + `v2_5_band_data_loop.png` |
-| 10 From data to diagnosis | `v2_5_band_data_loop.png` (the loop half) or three steps drawn in Canva |
-| 11-12 Results, vs the market | `v2_6_results_vs_market.png` |
-| 13 Future scope (optional) | `v2_4_device_tiers.png` |
+| 6 System architecture | `v2_0_full_system.png` |
+| 7 How the skin model evolved | `v2_1_old_vs_new.png` |
+| 8 Stages 1 and 2 | `v2_2_stage1_rash.png`, `v2_3_stage2_eczema.png` |
+| 9 Stage 3 severity | `3_stage3_severity.png` (still current) |
+| 10 Hardware | a photo of the band on the breadboard + `v2_5_band_data_loop.png` |
+| 11 From data to diagnosis | `v2_5_band_data_loop.png` (the loop half) or three steps drawn in Canva |
+| 12-13 Results, vs the market | `v2_6_results_vs_market.png` |
+| 15 Future scope (optional) | `v2_4_device_tiers.png` |
 
 The images are 3200 × 1800 PNG. If one is too dense for a slide, crop it to the top half (the
 flow) and keep the numbers as slide text.
@@ -94,7 +100,7 @@ a separate MP4 next to it.
 - [ ] **Healthy Indian skin:** 10 checks on our own healthy arms and hands, different light. Count how many say "No rash". If more than 2 of 10 say rash, tell Claude before the demo.
 - [ ] Turn on airplane mode after the model has loaded once and run a check: the offline claim must hold.
 
-**Video part A (skin check), per PITCH_DECK.md slide 4:**
+**Video part A (skin check), per PITCH_DECK.md slide 5 (done):**
 1. Phone: open the site, show "Install DermEdge" / installed app
 2. Healthy skin → "No rash detected"
 3. An eczema photo (from a screen or printed): rash → eczema → severity; on the laptop, the heatmap
@@ -120,7 +126,7 @@ music over speech. Export MP4 1080p; also keep A and B as separate files in case
 **No model to train.** The ECG and LM35 only need to read reliably and show up on the website:
 the pitch says the band collects data for the doctor, and models come later.
 
-**Video part B (band), per PITCH_DECK.md slide 4:** power on and pairing code → start a
+**Video part B (band): dropped, the band is not filmed.** Was: power on and pairing code → start a
 recording from the touch pad → scratching → the website's count goes up → ECG and temperature
 arriving live → an alert on the band, double tap. Film the band and the laptop screen together
 in one shot if possible. 1.5-2.5 min.
@@ -167,7 +173,8 @@ judges" section of PITCH_DECK.md together once.
 - Privacy: on-device, consent at setup, delete-all, India's DPDP Act; screening aid, not a diagnosis
 - Sustainability: free web app, no servers to pay for, low-cost band kit, clinic partnerships
 
-**Everyone:** the 30-second answer to "what is DermEdge?", and the flow on slide 5.
+**Everyone:** the 30-second answer to "what is DermEdge?", the flow on slide 6, and the four
+"today vs DermEdge" points on slide 4.
 
 ---
 
@@ -180,6 +187,7 @@ judges" section of PITCH_DECK.md together once.
 
 ## Day-of checklist
 
+- [ ] Site QR code on the last slide scans to derm-edge.vercel.app (test with a phone)
 - [ ] Laptop charged, charger, HDMI / USB-C adapter
 - [ ] Site loaded once on the laptop and both phones before leaving (it then works offline)
 - [ ] Video as MP4 on the laptop, a pen drive and Google Drive

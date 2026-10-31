@@ -182,7 +182,10 @@ judges" section of PITCH_DECK.md together once.
 
 - [ ] Run-through 1: full 10 minutes with the video, stopwatch on. Note where it runs long.
 - [ ] Cut, then run-through 2. Target 9:30, leaving 30 s of slack.
-- [ ] Decide who speaks which slides and who presses play.
+- [ ] Decide who speaks which slides and who presses play. **Shreeya (decided 31 Oct):** slides 1-4,
+  plays the demo video (slide 5), then Impact to the end (14 Impact, 15 What dermatologists told us,
+  16 Future scope, Thank you), at most 4 minutes in total. The rest of the team covers slides 6-13.
+  Her script is in [SCRIPT_SHREEYA.md](SCRIPT_SHREEYA.md).
 - [ ] Practise the fallback: if the video won't play, the live site on the laptop (already loaded).
 
 ## Day-of checklist

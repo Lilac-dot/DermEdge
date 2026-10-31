@@ -216,17 +216,20 @@ Different datasets, so a guide, not a contest.*
 
 ## 14. Impact
 
-- 204 million people live with eczema; 8.5% of Central Indian school children
-- Free on any phone browser: no app store, no servers, works offline
-- Built and tested for South Asian skin, not just lighter skin
+The slide the judges score: big, few words. Three stat boxes, then who benefits, then one line.
 
-**WHAT CHANGES**
-- **Patients:** a private check in seconds, at home
-- **Families:** know when to see a doctor, and what to show
-- **Doctors:** photos, scratching and heart data from between visits
-- **Areas with few dermatologists:** a first check that costs nothing
+| 204M | FREE | 84% |
+|---|---|---|
+| people live with eczema; 8.5% of Central Indian school children | to check your skin: any phone browser, no servers, works offline | of rashes caught on South Asian hospital photos |
 
-Screening aid, not a diagnosis (say it in the notes, not on the slide).
+**WHAT CHANGES** (two check marks)
+- Patients: a private check in seconds, at home · Families: when to see a doctor, and what to show
+- Doctors: the weeks between visits, in one report · Few dermatologists nearby: a free first check
+
+Closing line: **Care that doesn't stop between visits.**
+
+Screening aid, not a diagnosis (say it in the notes, not on the slide). Not "₹0": Playfair draws
+the zero like a letter o.
 
 ## 15. What dermatologists told us
 
@@ -246,15 +249,16 @@ LM35 is on the wrist, so only the future patch measures it at the rash. The patc
 
 ## 16. Future scope
 
-- **Sensor-trained flare model,** once doctors label band recordings
-- **Moisture patch** on the band (Southampton finding)
-- **Dermatologist validation** of the severity scores
+Three boxes, said left to right as steps: measure more, then smarter models, then reach more people.
 
-**REACHING MORE PEOPLE**
-- **17 MB phone model** for low-end phones (training script ready; `docs/architecture/v2_4_device_tiers.png`)
-- **300 KB on-device camera** (ESP32-CAM, already trained)
-- **Clinic partnerships:** reports shared with consent (DPDP Act)
-- A PCB band instead of the breadboard
+| Measure more | Smarter models | Reach more people |
+|---|---|---|
+| Skin patch on the rash: moisture + temperature | Stress model from heart rate + HRV | 17 MB model for low-end phones |
+| What dermatologists check, recorded every day | Flare model, once doctors label band data | 300 KB camera on the band |
+| Optical heart sensor: no electrodes | Dermatologist-validated severity scores | Clinic partnerships, with consent; a smaller PCB band |
+
+Closing line on the slide: **Private, fair eczema care at home.** None of these exist yet (the
+17 MB and 300 KB models are trained but not shipped); say "next", never "we have".
 
 Close: *"DermEdge brings private, fair eczema care home: a check in seconds, tracking in between,
 and data your doctor can act on."*

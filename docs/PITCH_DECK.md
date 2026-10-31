@@ -38,10 +38,14 @@ exact name for the round).
 | 3:15 | 6 Architecture, 7 Old vs new, 8 Stages 1-2, 9 Stage 3 |
 | 5:20 | 10 The band, 11 Data to diagnosis |
 | 6:40 | 12 Results, 13 DermEdge vs the market |
-| 8:00 | 14 **Impact** (slow down: this is what the judges score), 15 Future scope |
-| 9:20 | 16 Thank you + QR code, questions |
+| 8:00 | 14 **Impact** (slow down: this is what the judges score) |
+| 8:45 | 15 What dermatologists told us, 16 Future scope |
+| 9:30 | 17 Thank you + QR code, questions |
 
 If time runs short, say slide 11 in one sentence and skip the detail on slide 9.
+
+Slide numbers here are the deck's corner labels ("NN/ TELEMEDICON 26'"); the full-page diagram
+slides in Canva sit between them and carry no label.
 
 ---
 
@@ -224,7 +228,23 @@ Different datasets, so a guide, not a contest.*
 
 Screening aid, not a diagnosis (say it in the notes, not on the slide).
 
-## 15. Future scope
+## 15. What dermatologists told us
+
+Bridge into future scope. Four boxes, same style as slide 4. No names on the slide.
+
+| Box | Bullets |
+|---|---|
+| **What they check** | How dry the skin is near the rash · How warm the skin is around it |
+| **What's missing** | Checked by hand, only at the visit · Nothing measures it in between |
+| **The evidence** | Southampton: drier eczema skin, 13 of 13 · Clinical moisture meter agreed, 13 of 13 |
+| **What we'll add** | A soft skin patch on the rash · Moisture + temperature, recorded for the doctor |
+
+Rules: say "check" or "examine", never "diagnose" (eczema is diagnosed clinically; dry skin is one
+of the signs). Name the dermatologists out loud only if a judge asks and they agreed to be named.
+Moisture is the strong evidence (Southampton); temperature at the rash is supporting, and our band's
+LM35 is on the wrist, so only the future patch measures it at the rash. The patch isn't built yet.
+
+## 16. Future scope
 
 - **Sensor-trained flare model,** once doctors label band recordings
 - **Moisture patch** on the band (Southampton finding)
@@ -239,7 +259,7 @@ Screening aid, not a diagnosis (say it in the notes, not on the slide).
 Close: *"DermEdge brings private, fair eczema care home: a check in seconds, tracking in between,
 and data your doctor can act on."*
 
-## 16. Thank you
+## 17. Thank you
 
 "Team DermEdge · derm-edge.vercel.app", with the QR code for the site
 (`docs/demo/dermedge_site_qr.png`). Leave it up during questions.

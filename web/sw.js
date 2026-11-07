@@ -6,6 +6,7 @@
 //   The ONNX model files (/models/*.onnx, ~135 MB): left to engine.mjs, which already keeps them
 //     in its own Cache API store; caching them here too would store them twice.
 //   /api/*: never reaches the network; local-api.js answers it inside the page.
+//   /_vercel/*: Web Analytics, left to the network and never cached.
 // Bump VERSION when the list of shell files changes.
 const VERSION = 'v1';
 const SHELL = `dermedge-shell-${VERSION}`, CDN = `dermedge-cdn-${VERSION}`;
@@ -54,7 +55,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin === location.origin) {
-    if (url.pathname.startsWith('/api/') || url.pathname.endsWith('.onnx')) return;
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_vercel/') || url.pathname.endsWith('.onnx')) return;
     e.respondWith(networkFirst(req, SHELL));
   } else if (url.hostname === 'cdn.jsdelivr.net' && url.pathname.includes('/onnxruntime-web@')) {
     e.respondWith(cacheFirst(req, CDN));

@@ -568,7 +568,7 @@
 
     <div class="card" style="margin-top:20px" id="privacy">
       <h2>Privacy</h2>
-      <p class="muted" style="margin-top:0">Updated 26 October 2026. DermEdge has no accounts, no ads and no analytics.</p>
+      <p class="muted" style="margin-top:0">Updated 7 November 2026. DermEdge has no accounts and no ads. It counts anonymous page views (below).</p>
       <ul class="privacy">
         <li>Your health data stays on this device.
           <span>Photos, results, treatments, journal, skin type and band recordings are kept in this browser's own storage. They are never uploaded.</span></li>
@@ -579,6 +579,8 @@
         <li>What does use the internet.
           <span>Vercel hosts this site and the AI engine (ONNX Runtime) loads from the jsDelivr CDN. Like any website, they see your IP address and browser
             when you visit. The AI models download from this site once and are kept for offline use. None of these requests carry your photos or health data.</span></li>
+        <li>Anonymous visit counts.
+          <span>Vercel Web Analytics counts page views: page path, referrer, country and device type, with no cookies and nothing that identifies you. Query strings and in-page links are stripped before sending, and it never sees your photos, results or band readings.</span></li>
         <li>Data leaves only if you share it.
           <span>The doctor report and recording CSVs are made on this device, and go wherever you print, save or send them.</span></li>
         <li>You're in control.
@@ -591,7 +593,7 @@
 
     <div class="card" style="margin-top:20px">
       <h2>Your data</h2>
-      <p class="muted" style="margin-top:0">Your photos, results, treatments, journal and settings are stored in this browser only. Nothing is uploaded.</p>
+      <p class="muted" style="margin-top:0">Your photos, results, treatments, journal and settings are stored in this browser only. None of it is uploaded.</p>
       <button class="btn danger" id="wipeBtn">Delete all my data</button>
       <div class="confirm" id="wipeConfirm" hidden>
         <b id="wipeMsg">This permanently deletes everything DermEdge has stored on this device.</b>
@@ -1234,7 +1236,7 @@ function obRender() {
   if (obStep === 0) {
     el.innerHTML = `<h2 id="obTitle">Welcome to DermEdge</h2>
       <p class="muted">A private place to check and track eczema with your camera and wearable.</p>
-      <ul class="privacy"><li>Photos are analysed and stored on this device only. Nothing is uploaded.</li>
+      <ul class="privacy"><li>Photos are analysed and stored on this device only. Your health data is never uploaded; the site only counts anonymous visits.</li>
       <li>DermEdge is a screening aid, not a diagnosis. See a doctor for anything that worries you.</li>
       <li>You can delete all your data at any time from the About tab, which also has the full privacy details.</li></ul>
       <label class="toggle" style="color:var(--text)"><input type="checkbox" id="obConsent" ${obState.consent ? "checked" : ""}> I understand and want to continue</label>`;
@@ -1304,5 +1306,11 @@ if ("serviceWorker" in navigator) addEventListener("load", () =>
   loadTreatments();
 })();
 </script>
+<!-- Vercel Web Analytics: anonymous page views only. Strip query strings and hashes so no app state is sent. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  window.va("beforeSend", function (event) { var u = new URL(event.url); u.search = ""; u.hash = ""; event.url = u.toString(); return event; });
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>

@@ -1,12 +1,12 @@
 # DermEdge
 
-**Private eczema screening and flare tracking: a camera, a wearable, and AI that runs on your own device. No cloud; photos never leave the device.**
+**Private eczema screening and flare tracking: a camera, a wearable, and AI that runs on your own device. No cloud AI; photos and health data never leave the device.**
 
 DermEdge checks a photo of skin in three stages, tracks each body site over time, and combines the result with wearable stress and skin-moisture markers into a daily flare-risk score with tips. It runs on a laptop hub or entirely in the browser.
 
 **Live demo: https://derm-edge.vercel.app** (runs on your device; the first visit downloads the skin model once).
 
-**Pitch deck:** [Canva](https://canva.link/sjz2ti8lsuddh4j), with its slide text in [docs/PITCH_DECK.md](docs/PITCH_DECK.md).
+**Pitch deck:** [Canva](https://canva.link/sjz2ti8lsuddh4j), with its slide text in [docs/PITCH_DECK.md](docs/PITCH_DECK.md) and speaking notes in [docs/SPEAKING_POINTS.md](docs/SPEAKING_POINTS.md).
 
 Built by **Team DermEdge** (Tishya Yadlapalli, Nitish GB, Shreeya Jetti) for the **Telemedicon 2026 AI & Digital Health Hackathon**, IIIT Sri City.
 
@@ -65,7 +65,7 @@ The first rash screen caught 84% of rashes on Fitzpatrick I–IV but only 67% on
 - History chart, sample history for demos (clearly labelled), printable doctor report
 
 ## Try it in your browser
-`web/` is a static version of the dashboard where every model runs on the visitor's own device: CLIP ViT-B/16 with 8-bit weights through ONNX Runtime Web (WebGPU on laptops, WebAssembly on phones), the eczema-vs-look-alikes and severity heads on the same CLIP embedding, and the stress model in plain JavaScript. History is kept in the browser, nothing is uploaded, and the wearable tab uses a simulated wristband. The first visit downloads the skin model once (about 90 MB). It's deployed on Vercel from this repo (`vercel.json`); to try it locally, serve `web/` with any static server.
+`web/` is a static version of the dashboard where every model runs on the visitor's own device: CLIP ViT-B/16 with 8-bit weights through ONNX Runtime Web (WebGPU on laptops, WebAssembly on phones), the eczema-vs-look-alikes and severity heads on the same CLIP embedding, and the stress model in plain JavaScript. History is kept in the browser and none of it is uploaded (the site only counts anonymous page views with Vercel Web Analytics, no cookies), and the wearable tab uses a simulated wristband. The first visit downloads the skin model once (about 90 MB). It's deployed on Vercel from this repo (`vercel.json`); to try it locally, serve `web/` with any static server.
 
 Checked against the Python models: the browser CLIP gives the same stage-1 decision on 98.5% of 200 held-out phone photos, and the JavaScript stress model matches its Python version exactly. `scripts/export_web_models.py` rebuilds `web/models/`.
 
